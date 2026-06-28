@@ -1,0 +1,4 @@
+.agents/
+codex-mcp.sqlite
+*.uvprojx.before_*
+*.uvprojx.broken_*
