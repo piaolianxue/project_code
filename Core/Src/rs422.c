@@ -23,12 +23,14 @@ typedef struct
 
 static const RS422_PortConfig rs422_config[RS422_PORT_COUNT] =
 {
+    /* TX_EN_x 的有效电平决定收发器进入发送模式时输出的方向控制电平。 */
     {
         &huart1,
         TX_EN_1_GPIO_Port, TX_EN_1_Pin, GPIO_PIN_SET
     },
     {
-        &huart2,
+        /* U10 的 THVD1452 实际接到 UART3_RX/TX，因此这里使用 USART3 句柄。 */
+        &huart3,
         TX_EN_2_GPIO_Port, TX_EN_2_Pin, GPIO_PIN_SET
     }
 };
@@ -36,6 +38,15 @@ static const RS422_PortConfig rs422_config[RS422_PORT_COUNT] =
 static RS422_PortState rs422_state[RS422_PORT_COUNT];
 static uint8_t rs422_rx_buffer[RS422_PORT_COUNT][RS422_RX_BUFFER_SIZE];
 static uint8_t rs422_tx_buffer[RS422_PORT_COUNT][RS422_TX_BUFFER_SIZE];
+
+/* 以下诊断变量用于确认 RS422 UART 是否真的进入发送、接收或错误回调。 */
+volatile uint32_t rs422_diag_tx_complete_count[RS422_PORT_COUNT] = {0U};
+volatile uint32_t rs422_diag_rx_complete_count[RS422_PORT_COUNT] = {0U};
+volatile uint32_t rs422_diag_error_count[RS422_PORT_COUNT] = {0U};
+volatile uint32_t rs422_diag_abort_count[RS422_PORT_COUNT] = {0U};
+volatile uint32_t rs422_diag_last_error_code[RS422_PORT_COUNT] = {0U};
+volatile uint32_t rs422_diag_last_rx_byte[RS422_PORT_COUNT] = {0U};
+volatile uint32_t rs422_diag_start_receive_status[RS422_PORT_COUNT] = {0U};
 
 /**
   * @brief  判断 RS422 端口编号是否在有效范围内。
@@ -222,6 +233,13 @@ void RS422_Init(void)
         rs422_state[port].tx_head = 0U;
         rs422_state[port].tx_tail = 0U;
         rs422_state[port].tx_busy = 0U;
+        rs422_diag_tx_complete_count[port] = 0U;
+        rs422_diag_rx_complete_count[port] = 0U;
+        rs422_diag_error_count[port] = 0U;
+        rs422_diag_abort_count[port] = 0U;
+        rs422_diag_last_error_code[port] = 0U;
+        rs422_diag_last_rx_byte[port] = 0U;
+        rs422_diag_start_receive_status[port] = 0U;
         RS422_SetReceiveMode(port);
     }
 
@@ -236,6 +254,7 @@ void RS422_Init(void)
 HAL_StatusTypeDef RS422_StartReceive(RS422_PortId port)
 {
     RS422_PortState *state;
+    HAL_StatusTypeDef status;
 
     if (RS422_IsValidPort(port) == 0U)
     {
@@ -245,7 +264,9 @@ HAL_StatusTypeDef RS422_StartReceive(RS422_PortId port)
     RS422_SetReceiveMode(port);
     state = &rs422_state[port];
 
-    return HAL_UART_Receive_IT(rs422_config[port].huart, &state->rx_byte, 1U);
+    status = HAL_UART_Receive_IT(rs422_config[port].huart, &state->rx_byte, 1U);
+    rs422_diag_start_receive_status[port] = (uint32_t)status;
+    return status;
 }
 
 /**
@@ -449,6 +470,7 @@ void RS422_UART_TxCpltCallback(UART_HandleTypeDef *huart)
         return;
     }
 
+    rs422_diag_tx_complete_count[port]++;
     rs422_state[port].tx_busy = 0U;
     RS422_KickTx(port);
 }
@@ -467,6 +489,8 @@ void RS422_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         return;
     }
 
+    rs422_diag_rx_complete_count[port]++;
+    rs422_diag_last_rx_byte[port] = rs422_state[port].rx_byte;
     RS422_RxPush(port, rs422_state[port].rx_byte);
     (void)HAL_UART_Receive_IT(huart, &rs422_state[port].rx_byte, 1U);
 }
@@ -485,6 +509,8 @@ void RS422_UART_ErrorCallback(UART_HandleTypeDef *huart)
         return;
     }
 
+    rs422_diag_error_count[port]++;
+    rs422_diag_last_error_code[port] = HAL_UART_GetError(huart);
     (void)HAL_UART_AbortReceive_IT(huart);
 }
 
@@ -502,7 +528,9 @@ void RS422_UART_AbortReceiveCpltCallback(UART_HandleTypeDef *huart)
         return;
     }
 
-    (void)HAL_UART_Receive_IT(huart, &rs422_state[port].rx_byte, 1U);
+    rs422_diag_abort_count[port]++;
+    rs422_diag_start_receive_status[port] =
+        (uint32_t)HAL_UART_Receive_IT(huart, &rs422_state[port].rx_byte, 1U);
 }
 
 /**

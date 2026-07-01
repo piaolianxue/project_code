@@ -18,6 +18,15 @@ typedef enum
 
 void RS422_Init(void);
 
+/* 以下诊断变量用于 DAPLink 观察 UART 中断和错误路径是否被触发。 */
+extern volatile uint32_t rs422_diag_tx_complete_count[RS422_PORT_COUNT];
+extern volatile uint32_t rs422_diag_rx_complete_count[RS422_PORT_COUNT];
+extern volatile uint32_t rs422_diag_error_count[RS422_PORT_COUNT];
+extern volatile uint32_t rs422_diag_abort_count[RS422_PORT_COUNT];
+extern volatile uint32_t rs422_diag_last_error_code[RS422_PORT_COUNT];
+extern volatile uint32_t rs422_diag_last_rx_byte[RS422_PORT_COUNT];
+extern volatile uint32_t rs422_diag_start_receive_status[RS422_PORT_COUNT];
+
 HAL_StatusTypeDef RS422_StartReceive(RS422_PortId port);
 HAL_StatusTypeDef RS422_StartReceiveAll(void);
 HAL_StatusTypeDef RS422_Transmit_IT(RS422_PortId port, const uint8_t *data, uint16_t size);
