@@ -67,7 +67,8 @@ extern TIM_HandleTypeDef htim6;
 /*           Cortex Processor Interruption and Exception Handlers          */
 /******************************************************************************/
 /**
-  * @brief This function handles Non maskable interrupt.
+  * @brief  不可屏蔽中断处理函数，异常发生后停在此处便于调试。
+  * @retval None
   */
 void NMI_Handler(void)
 {
@@ -82,7 +83,8 @@ void NMI_Handler(void)
 }
 
 /**
-  * @brief This function handles Hard fault interrupt.
+  * @brief  硬件错误异常处理函数，异常发生后停在此处便于调试。
+  * @retval None
   */
 void HardFault_Handler(void)
 {
@@ -97,7 +99,8 @@ void HardFault_Handler(void)
 }
 
 /**
-  * @brief This function handles Memory management fault.
+  * @brief  内存管理错误异常处理函数，异常发生后停在此处便于调试。
+  * @retval None
   */
 void MemManage_Handler(void)
 {
@@ -112,7 +115,8 @@ void MemManage_Handler(void)
 }
 
 /**
-  * @brief This function handles Pre-fetch fault, memory access fault.
+  * @brief  总线访问错误异常处理函数，异常发生后停在此处便于调试。
+  * @retval None
   */
 void BusFault_Handler(void)
 {
@@ -127,7 +131,8 @@ void BusFault_Handler(void)
 }
 
 /**
-  * @brief This function handles Undefined instruction or illegal state.
+  * @brief  未定义指令或非法状态异常处理函数，异常发生后停在此处便于调试。
+  * @retval None
   */
 void UsageFault_Handler(void)
 {
@@ -142,7 +147,8 @@ void UsageFault_Handler(void)
 }
 
 /**
-  * @brief This function handles System service call via SWI instruction.
+  * @brief  SVC 系统服务调用异常处理函数。
+  * @retval None
   */
 void SVC_Handler(void)
 {
@@ -155,7 +161,8 @@ void SVC_Handler(void)
 }
 
 /**
-  * @brief This function handles Debug monitor.
+  * @brief  调试监视器异常处理函数。
+  * @retval None
   */
 void DebugMon_Handler(void)
 {
@@ -168,7 +175,8 @@ void DebugMon_Handler(void)
 }
 
 /**
-  * @brief This function handles Pendable request for system service.
+  * @brief  PendSV 可挂起系统服务异常处理函数。
+  * @retval None
   */
 void PendSV_Handler(void)
 {
@@ -181,7 +189,8 @@ void PendSV_Handler(void)
 }
 
 /**
-  * @brief This function handles System tick timer.
+  * @brief  SysTick 中断处理函数，本工程 HAL 节拍由 TIM6 提供。
+  * @retval None
   */
 void SysTick_Handler(void)
 {
@@ -202,7 +211,8 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /**
-  * @brief This function handles TIM6 global interrupt, DAC1_CH1 and DAC1_CH2 underrun error interrupts.
+  * @brief  TIM6 全局中断处理函数，用于 HAL 1 ms 时间基准。
+  * @retval None
   */
 void TIM6_DAC_IRQHandler(void)
 {
@@ -217,16 +227,28 @@ void TIM6_DAC_IRQHandler(void)
 
 /* USER CODE BEGIN 1 */
 
+/**
+  * @brief  USART1 中断处理函数，对应 RS422 U9 通道。
+  * @retval None
+  */
 void USART1_IRQHandler(void)
 {
   HAL_UART_IRQHandler(&huart1);
 }
 
+/**
+  * @brief  USART2 中断处理函数，对应 RS422 U10 通道。
+  * @retval None
+  */
 void USART2_IRQHandler(void)
 {
   HAL_UART_IRQHandler(&huart2);
 }
 
+/**
+  * @brief  USART3 中断处理函数，转交 HAL UART 中断框架处理。
+  * @retval None
+  */
 void USART3_IRQHandler(void)
 {
   HAL_UART_IRQHandler(&huart3);

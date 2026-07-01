@@ -73,8 +73,8 @@ void SystemClock_Config(void);
 /* USER CODE END 0 */
 
 /**
-  * @brief  The application entry point.
-  * @retval int
+  * @brief  应用程序入口，完成 HAL、时钟和外设初始化后进入主循环。
+  * @retval int 当前程序不会主动返回。
   */
 int main(void)
 {
@@ -138,7 +138,7 @@ int main(void)
 }
 
 /**
-  * @brief System Clock Configuration
+  * @brief  配置系统主时钟、总线时钟以及 SPI/UART 外设时钟源。
   * @retval None
   */
 void SystemClock_Config(void)
@@ -209,11 +209,8 @@ void SystemClock_Config(void)
 /* USER CODE END 4 */
 
  /**
-  * @brief  Period elapsed callback in non blocking mode
-  * @note   This function is called  when TIM6 interrupt took place, inside
-  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
-  * a global variable "uwTick" used as application time base.
-  * @param  htim : TIM handle
+  * @brief  定时器周期到达回调，用 TIM6 维护 HAL 的 1 ms 系统节拍。
+  * @param  htim: 触发回调的定时器句柄。
   * @retval None
   */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -230,7 +227,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 }
 
 /**
-  * @brief  This function is executed in case of error occurrence.
+  * @brief  HAL 或外设初始化出错时进入的错误处理函数。
   * @retval None
   */
 void Error_Handler(void)
@@ -246,10 +243,9 @@ void Error_Handler(void)
 
 #ifdef  USE_FULL_ASSERT
 /**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
+  * @brief  断言失败回调，用于定位参数检查失败的源码位置。
+  * @param  file: 发生断言失败的源文件名。
+  * @param  line: 发生断言失败的源代码行号。
   * @retval None
   */
 void assert_failed(uint8_t *file, uint32_t line)

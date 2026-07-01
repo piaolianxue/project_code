@@ -31,7 +31,8 @@
 
 /* USER CODE END 1 */
 
-/** Configure pins
+/**
+  * @brief  配置工程用到的 GPIO 引脚。
      PH0-OSC_IN (PH0)   ------> RCC_OSC_IN
      PH1-OSC_OUT (PH1)   ------> RCC_OSC_OUT
      PA13 (JTMS/SWDIO)   ------> DEBUG_JTMS-SWDIO

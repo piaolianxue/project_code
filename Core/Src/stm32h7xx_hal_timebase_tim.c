@@ -31,13 +31,10 @@ TIM_HandleTypeDef        htim6;
 /* Private functions ---------------------------------------------------------*/
 
 /**
-  * @brief  This function configures the TIM6 as a time base source.
-  *         The time source is configured  to have 1ms time base with a dedicated
-  *         Tick interrupt priority.
-  * @note   This function is called  automatically at the beginning of program after
-  *         reset by HAL_Init() or at any time when clock is configured, by HAL_RCC_ClockConfig().
-  * @param  TickPriority: Tick interrupt priority.
-  * @retval HAL status
+  * @brief  配置 TIM6 作为 HAL 的 1 ms 时间基准。
+  * @note   HAL_Init() 或 HAL_RCC_ClockConfig() 会自动调用该函数。
+  * @param  TickPriority: TIM6 中断优先级。
+  * @retval HAL 状态，HAL_OK 表示时间基准启动成功。
   */
 HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
 {
@@ -104,9 +101,8 @@ HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
 }
 
 /**
-  * @brief  Suspend Tick increment.
-  * @note   Disable the tick increment by disabling TIM6 update interrupt.
-  * @param  None
+  * @brief  暂停 HAL 系统节拍递增。
+  * @note   通过关闭 TIM6 更新中断实现。
   * @retval None
   */
 void HAL_SuspendTick(void)
@@ -116,9 +112,8 @@ void HAL_SuspendTick(void)
 }
 
 /**
-  * @brief  Resume Tick increment.
-  * @note   Enable the tick increment by Enabling TIM6 update interrupt.
-  * @param  None
+  * @brief  恢复 HAL 系统节拍递增。
+  * @note   通过打开 TIM6 更新中断实现。
   * @retval None
   */
 void HAL_ResumeTick(void)

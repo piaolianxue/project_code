@@ -131,10 +131,8 @@
   */
 
 /**
-  * @brief  Setup the microcontroller system
-  *         Initialize the FPU setting and  vector table location
-  *         configuration.
-  * @param  None
+  * @brief  复位后进入 main 之前完成系统底层初始化。
+  * @note   主要初始化 FPU、RCC 复位状态以及中断向量表位置。
   * @retval None
   */
 void SystemInit (void)
@@ -272,10 +270,8 @@ void SystemInit (void)
 }
 
 /**
-   * @brief  Update SystemCoreClock variable according to Clock Register Values.
-  *         The SystemCoreClock variable contains the core clock , it can
-  *         be used by the user application to setup the SysTick timer or configure
-  *         other parameters.
+  * @brief  根据当前 RCC 寄存器配置更新 SystemCoreClock 和 SystemD2Clock。
+  * @note   时钟配置改变后应调用该函数，确保依赖核心频率的模块使用正确值。
   *
   * @note   Each time the core clock changes, this function must be called
   *         to update SystemCoreClock variable value. Otherwise, any configuration
@@ -305,7 +301,6 @@ void SystemInit (void)
   *
   *         - The result of this function could be not correct when using fractional
   *           value for HSE crystal.
-  * @param  None
   * @retval None
   */
 void SystemCoreClockUpdate (void)

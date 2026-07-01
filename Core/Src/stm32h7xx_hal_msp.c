@@ -59,7 +59,8 @@
 
 /* USER CODE END 0 */
 /**
-  * Initializes the Global MSP.
+  * @brief  初始化全局 MSP 资源，打开系统配置控制器时钟。
+  * @retval None
   */
 void HAL_MspInit(void)
 {

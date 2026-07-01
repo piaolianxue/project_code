@@ -28,8 +28,10 @@ UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
 
-/* USART1 init function */
-
+/**
+  * @brief  初始化 USART1，对应 RS422 U9 通道。
+  * @retval None
+  */
 void MX_USART1_UART_Init(void)
 {
 
@@ -62,8 +64,10 @@ void MX_USART1_UART_Init(void)
   }
 
 }
-/* USART2 init function */
-
+/**
+  * @brief  初始化 USART2，对应 RS422 U10 通道。
+  * @retval None
+  */
 void MX_USART2_UART_Init(void)
 {
 
@@ -96,8 +100,10 @@ void MX_USART2_UART_Init(void)
   }
 
 }
-/* USART3 init function */
-
+/**
+  * @brief  初始化 USART3，预留为普通串口收发接口。
+  * @retval None
+  */
 void MX_USART3_UART_Init(void)
 {
 
@@ -131,6 +137,11 @@ void MX_USART3_UART_Init(void)
 
 }
 
+/**
+  * @brief  根据 UART 实例初始化对应的时钟、GPIO 和中断。
+  * @param  uartHandle: 待初始化底层资源的 UART 句柄。
+  * @retval None
+  */
 void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
 {
 
@@ -215,6 +226,11 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
   }
 }
 
+/**
+  * @brief  根据 UART 实例释放对应的时钟、GPIO 和中断。
+  * @param  uartHandle: 待释放底层资源的 UART 句柄。
+  * @retval None
+  */
 void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
 {
 

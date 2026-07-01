@@ -28,7 +28,10 @@ SPI_HandleTypeDef hspi2;
 SPI_HandleTypeDef hspi3;
 SPI_HandleTypeDef hspi4;
 
-/* SPI2 init function */
+/**
+  * @brief  初始化 SPI2，用于 U18 侧 SSI422 读数接口。
+  * @retval None
+  */
 void MX_SPI2_Init(void)
 {
 
@@ -60,7 +63,10 @@ void MX_SPI2_Init(void)
   }
 
 }
-/* SPI3 init function */
+/**
+  * @brief  初始化 SPI3，用于两片 ADS7951 ADC 的 SPI 通信。
+  * @retval None
+  */
 void MX_SPI3_Init(void)
 {
 
@@ -92,7 +98,10 @@ void MX_SPI3_Init(void)
   }
 
 }
-/* SPI4 init function */
+/**
+  * @brief  初始化 SPI4，用于 U16 侧 SSI422 读数接口。
+  * @retval None
+  */
 void MX_SPI4_Init(void)
 {
 
@@ -125,6 +134,11 @@ void MX_SPI4_Init(void)
 
 }
 
+/**
+  * @brief  根据 SPI 实例初始化对应的时钟和 GPIO 复用引脚。
+  * @param  spiHandle: 待初始化底层资源的 SPI 句柄。
+  * @retval None
+  */
 void HAL_SPI_MspInit(SPI_HandleTypeDef* spiHandle)
 {
 
@@ -213,6 +227,11 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* spiHandle)
   }
 }
 
+/**
+  * @brief  根据 SPI 实例释放对应的时钟和 GPIO 复用引脚。
+  * @param  spiHandle: 待释放底层资源的 SPI 句柄。
+  * @retval None
+  */
 void HAL_SPI_MspDeInit(SPI_HandleTypeDef* spiHandle)
 {
 

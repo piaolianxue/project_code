@@ -37,11 +37,22 @@ static RS422_PortState rs422_state[RS422_PORT_COUNT];
 static uint8_t rs422_rx_buffer[RS422_PORT_COUNT][RS422_RX_BUFFER_SIZE];
 static uint8_t rs422_tx_buffer[RS422_PORT_COUNT][RS422_TX_BUFFER_SIZE];
 
+/**
+  * @brief  判断 RS422 端口编号是否在有效范围内。
+  * @param  port: RS422 端口枚举值。
+  * @retval 1 表示有效，0 表示无效。
+  */
 static uint8_t RS422_IsValidPort(RS422_PortId port)
 {
     return ((uint32_t)port < (uint32_t)RS422_PORT_COUNT) ? 1U : 0U;
 }
 
+/**
+  * @brief  计算环形缓冲区的下一个索引位置。
+  * @param  index: 当前索引。
+  * @param  size: 环形缓冲区总长度。
+  * @retval 递增并自动回绕后的索引。
+  */
 static uint16_t RS422_RingNext(uint16_t index, uint16_t size)
 {
     index++;
@@ -53,6 +64,13 @@ static uint16_t RS422_RingNext(uint16_t index, uint16_t size)
     return index;
 }
 
+/**
+  * @brief  计算环形缓冲区中已经使用的字节数。
+  * @param  head: 写入指针位置。
+  * @param  tail: 读取指针位置。
+  * @param  size: 环形缓冲区总长度。
+  * @retval 当前已缓存的数据字节数。
+  */
 static uint16_t RS422_RingUsed(uint16_t head, uint16_t tail, uint16_t size)
 {
     if (head >= tail)
@@ -63,11 +81,24 @@ static uint16_t RS422_RingUsed(uint16_t head, uint16_t tail, uint16_t size)
     return (uint16_t)(size - tail + head);
 }
 
+/**
+  * @brief  计算环形缓冲区剩余可写空间。
+  * @param  head: 写入指针位置。
+  * @param  tail: 读取指针位置。
+  * @param  size: 环形缓冲区总长度。
+  * @retval 可继续写入的字节数，保留 1 字节用于区分满/空。
+  */
 static uint16_t RS422_RingFree(uint16_t head, uint16_t tail, uint16_t size)
 {
     return (uint16_t)(size - 1U - RS422_RingUsed(head, tail, size));
 }
 
+/**
+  * @brief  将接收到的 1 字节压入指定端口的接收环形缓冲区。
+  * @param  port: RS422 端口枚举值。
+  * @param  data: 要写入接收缓冲区的字节。
+  * @retval None
+  */
 static void RS422_RxPush(RS422_PortId port, uint8_t data)
 {
     RS422_PortState *state = &rs422_state[port];
@@ -80,6 +111,12 @@ static void RS422_RxPush(RS422_PortId port, uint8_t data)
     }
 }
 
+/**
+  * @brief  从指定端口的发送环形缓冲区取出 1 字节。
+  * @param  port: RS422 端口枚举值。
+  * @param  data: 返回取出的字节。
+  * @retval 1 表示取到数据，0 表示发送缓冲区为空。
+  */
 static uint8_t RS422_TxPop(RS422_PortId port, uint8_t *data)
 {
     RS422_PortState *state = &rs422_state[port];
@@ -95,6 +132,11 @@ static uint8_t RS422_TxPop(RS422_PortId port, uint8_t *data)
     return 1U;
 }
 
+/**
+  * @brief  将指定 RS422 收发器切换到接收模式。
+  * @param  port: RS422 端口枚举值。
+  * @retval None
+  */
 static void RS422_SetReceiveMode(RS422_PortId port)
 {
     const RS422_PortConfig *config = &rs422_config[port];
@@ -103,6 +145,11 @@ static void RS422_SetReceiveMode(RS422_PortId port)
                       (config->tx_en_active == GPIO_PIN_SET) ? GPIO_PIN_RESET : GPIO_PIN_SET);
 }
 
+/**
+  * @brief  将指定 RS422 收发器切换到发送模式。
+  * @param  port: RS422 端口枚举值。
+  * @retval None
+  */
 static void RS422_SetTransmitMode(RS422_PortId port)
 {
     const RS422_PortConfig *config = &rs422_config[port];
@@ -110,6 +157,11 @@ static void RS422_SetTransmitMode(RS422_PortId port)
     HAL_GPIO_WritePin(config->tx_en_port, config->tx_en_pin, config->tx_en_active);
 }
 
+/**
+  * @brief  启动或续接指定端口的中断发送流程。
+  * @param  port: RS422 端口枚举值。
+  * @retval None
+  */
 static void RS422_KickTx(RS422_PortId port)
 {
     RS422_PortState *state = &rs422_state[port];
@@ -135,6 +187,11 @@ static void RS422_KickTx(RS422_PortId port)
     }
 }
 
+/**
+  * @brief  根据 HAL UART 句柄查找对应的 RS422 端口。
+  * @param  huart: HAL UART 句柄地址。
+  * @retval 匹配的端口编号；未匹配时返回 RS422_PORT_COUNT。
+  */
 static RS422_PortId RS422_FindPortByUart(UART_HandleTypeDef *huart)
 {
     RS422_PortId port;
@@ -150,6 +207,10 @@ static RS422_PortId RS422_FindPortByUart(UART_HandleTypeDef *huart)
     return RS422_PORT_COUNT;
 }
 
+/**
+  * @brief  初始化全部 RS422 端口状态并启动中断接收。
+  * @retval None
+  */
 void RS422_Init(void)
 {
     RS422_PortId port;
@@ -167,6 +228,11 @@ void RS422_Init(void)
     (void)RS422_StartReceiveAll();
 }
 
+/**
+  * @brief  启动指定 RS422 端口的单字节中断接收。
+  * @param  port: RS422 端口枚举值。
+  * @retval HAL 状态，HAL_OK/HAL_BUSY 由底层 UART 接收接口返回。
+  */
 HAL_StatusTypeDef RS422_StartReceive(RS422_PortId port)
 {
     RS422_PortState *state;
@@ -182,6 +248,10 @@ HAL_StatusTypeDef RS422_StartReceive(RS422_PortId port)
     return HAL_UART_Receive_IT(rs422_config[port].huart, &state->rx_byte, 1U);
 }
 
+/**
+  * @brief  依次启动所有 RS422 端口的中断接收。
+  * @retval HAL 状态，所有端口正常或忙时返回 HAL_OK。
+  */
 HAL_StatusTypeDef RS422_StartReceiveAll(void)
 {
     HAL_StatusTypeDef status = HAL_OK;
@@ -200,6 +270,13 @@ HAL_StatusTypeDef RS422_StartReceiveAll(void)
     return status;
 }
 
+/**
+  * @brief  将数据写入发送缓冲区并通过中断方式发送。
+  * @param  port: RS422 端口枚举值。
+  * @param  data: 待发送数据缓冲区。
+  * @param  size: 待发送字节数。
+  * @retval HAL_OK 表示成功入队，HAL_BUSY 表示发送缓冲区空间不足。
+  */
 HAL_StatusTypeDef RS422_Transmit_IT(RS422_PortId port, const uint8_t *data, uint16_t size)
 {
     RS422_PortState *state;
@@ -230,6 +307,14 @@ HAL_StatusTypeDef RS422_Transmit_IT(RS422_PortId port, const uint8_t *data, uint
     return HAL_OK;
 }
 
+/**
+  * @brief  以阻塞等待方式发送 RS422 数据。
+  * @param  port: RS422 端口枚举值。
+  * @param  data: 待发送数据缓冲区。
+  * @param  size: 待发送字节数。
+  * @param  timeout: 等待发送完成的超时时间，单位 ms。
+  * @retval HAL 状态，超时未发完时返回 HAL_TIMEOUT。
+  */
 HAL_StatusTypeDef RS422_Transmit(RS422_PortId port, const uint8_t *data, uint16_t size, uint32_t timeout)
 {
     uint32_t start = HAL_GetTick();
@@ -252,6 +337,11 @@ HAL_StatusTypeDef RS422_Transmit(RS422_PortId port, const uint8_t *data, uint16_
     return HAL_OK;
 }
 
+/**
+  * @brief  查询指定 RS422 端口接收缓冲区中可读字节数。
+  * @param  port: RS422 端口枚举值。
+  * @retval 当前可读取的字节数，端口无效时返回 0。
+  */
 uint16_t RS422_Available(RS422_PortId port)
 {
     uint16_t used;
@@ -268,6 +358,13 @@ uint16_t RS422_Available(RS422_PortId port)
     return used;
 }
 
+/**
+  * @brief  从指定 RS422 端口接收缓冲区读取数据。
+  * @param  port: RS422 端口枚举值。
+  * @param  data: 接收数据输出缓冲区。
+  * @param  max_size: 本次最多读取的字节数。
+  * @retval 实际读取到的字节数。
+  */
 uint16_t RS422_Read(RS422_PortId port, uint8_t *data, uint16_t max_size)
 {
     RS422_PortState *state;
@@ -298,6 +395,11 @@ uint16_t RS422_Read(RS422_PortId port, uint8_t *data, uint16_t max_size)
     return count;
 }
 
+/**
+  * @brief  清空指定 RS422 端口的接收缓冲区。
+  * @param  port: RS422 端口枚举值。
+  * @retval None
+  */
 void RS422_ClearRx(RS422_PortId port)
 {
     if (RS422_IsValidPort(port) == 0U)
@@ -311,6 +413,11 @@ void RS422_ClearRx(RS422_PortId port)
     __enable_irq();
 }
 
+/**
+  * @brief  查询指定 RS422 端口是否仍有数据正在发送或等待发送。
+  * @param  port: RS422 端口枚举值。
+  * @retval 1 表示发送忙，0 表示空闲。
+  */
 uint8_t RS422_IsTxBusy(RS422_PortId port)
 {
     uint8_t busy;
@@ -328,6 +435,11 @@ uint8_t RS422_IsTxBusy(RS422_PortId port)
     return busy;
 }
 
+/**
+  * @brief  RS422 UART 发送完成处理，继续发送队列中的下一个字节。
+  * @param  huart: 触发回调的 HAL UART 句柄。
+  * @retval None
+  */
 void RS422_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
     RS422_PortId port = RS422_FindPortByUart(huart);
@@ -341,6 +453,11 @@ void RS422_UART_TxCpltCallback(UART_HandleTypeDef *huart)
     RS422_KickTx(port);
 }
 
+/**
+  * @brief  RS422 UART 接收完成处理，缓存数据并重新挂起下一字节接收。
+  * @param  huart: 触发回调的 HAL UART 句柄。
+  * @retval None
+  */
 void RS422_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     RS422_PortId port = RS422_FindPortByUart(huart);
@@ -354,6 +471,11 @@ void RS422_UART_RxCpltCallback(UART_HandleTypeDef *huart)
     (void)HAL_UART_Receive_IT(huart, &rs422_state[port].rx_byte, 1U);
 }
 
+/**
+  * @brief  RS422 UART 错误处理，先中止当前接收等待后续恢复。
+  * @param  huart: 触发错误回调的 HAL UART 句柄。
+  * @retval None
+  */
 void RS422_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
     RS422_PortId port = RS422_FindPortByUart(huart);
@@ -366,6 +488,11 @@ void RS422_UART_ErrorCallback(UART_HandleTypeDef *huart)
     (void)HAL_UART_AbortReceive_IT(huart);
 }
 
+/**
+  * @brief  RS422 UART 接收中止完成处理，重新启动单字节中断接收。
+  * @param  huart: 触发回调的 HAL UART 句柄。
+  * @retval None
+  */
 void RS422_UART_AbortReceiveCpltCallback(UART_HandleTypeDef *huart)
 {
     RS422_PortId port = RS422_FindPortByUart(huart);
@@ -378,21 +505,41 @@ void RS422_UART_AbortReceiveCpltCallback(UART_HandleTypeDef *huart)
     (void)HAL_UART_Receive_IT(huart, &rs422_state[port].rx_byte, 1U);
 }
 
+/**
+  * @brief  HAL UART 发送完成总回调，转发给 RS422 驱动处理。
+  * @param  huart: 触发回调的 HAL UART 句柄。
+  * @retval None
+  */
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
     RS422_UART_TxCpltCallback(huart);
 }
 
+/**
+  * @brief  HAL UART 接收完成总回调，转发给 RS422 驱动处理。
+  * @param  huart: 触发回调的 HAL UART 句柄。
+  * @retval None
+  */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     RS422_UART_RxCpltCallback(huart);
 }
 
+/**
+  * @brief  HAL UART 错误总回调，转发给 RS422 驱动处理。
+  * @param  huart: 触发错误回调的 HAL UART 句柄。
+  * @retval None
+  */
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
     RS422_UART_ErrorCallback(huart);
 }
 
+/**
+  * @brief  HAL UART 接收中止完成总回调，转发给 RS422 驱动处理。
+  * @param  huart: 触发回调的 HAL UART 句柄。
+  * @retval None
+  */
 void HAL_UART_AbortReceiveCpltCallback(UART_HandleTypeDef *huart)
 {
     RS422_UART_AbortReceiveCpltCallback(huart);
