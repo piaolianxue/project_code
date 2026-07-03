@@ -40,10 +40,10 @@ static uint8_t rs422_rx_buffer[RS422_PORT_COUNT][RS422_RX_BUFFER_SIZE];
 static uint8_t rs422_tx_buffer[RS422_PORT_COUNT][RS422_TX_BUFFER_SIZE];
 
 /* 以下诊断变量用于确认 RS422 UART 是否真的进入发送、接收或错误回调。 */
-volatile uint32_t rs422_diag_tx_complete_count[RS422_PORT_COUNT] = {0U};
-volatile uint32_t rs422_diag_rx_complete_count[RS422_PORT_COUNT] = {0U};
+volatile uint32_t rs422_diag_tx_complete_count[RS422_PORT_COUNT] = {0U};// 发送完成次数
+volatile uint32_t rs422_diag_rx_complete_count[RS422_PORT_COUNT] = {0U};// 接收完成次数
 volatile uint32_t rs422_diag_error_count[RS422_PORT_COUNT] = {0U};
-volatile uint32_t rs422_diag_abort_count[RS422_PORT_COUNT] = {0U};
+volatile uint32_t rs422_diag_abort_count[RS422_PORT_COUNT] = {0U};// 异常中止次数
 volatile uint32_t rs422_diag_last_error_code[RS422_PORT_COUNT] = {0U};
 volatile uint32_t rs422_diag_last_rx_byte[RS422_PORT_COUNT] = {0U};
 volatile uint32_t rs422_diag_start_receive_status[RS422_PORT_COUNT] = {0U};
