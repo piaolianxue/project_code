@@ -1,4 +1,23 @@
 .agents/
+.codex/
 codex-mcp.sqlite
+
+# Local build and helper output
+build/
+GCC/
+tmp_npm_cache/
+pdf_tools/
+pdf_text_tools/
+
+# Keil generated files
+MDK-ARM/shuziliangceshi/
+MDK-ARM/DebugConfig/
+MDK-ARM/*.log
+MDK-ARM/*.bak
+MDK-ARM/JLinkLog.txt
+MDK-ARM/JLinkSettings.ini
+MDK-ARM/EventRecorderStub.scvd
+MDK-ARM/*.uvguix.*
+MDK-ARM/*.uvoptx
 *.uvprojx.before_*
 *.uvprojx.broken_*
