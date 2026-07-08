@@ -26,6 +26,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ads7951.h"
+#include "host_comm.h"
 #include "rs422.h"
 #include "rs422_protocol.h"
 #include "ssi422.h"
@@ -52,12 +53,19 @@
 #define RS422_PROTOCOL_TEST_ID_U10           2U
 #endif
 /* RS422 串口1示例开关：0 为不运行示例，1 为通过 U9/USART1 周期发包并轮询接收。 */
-#define RS422_UART1_EXAMPLE_ENABLE           0U
+#define RS422_UART1_EXAMPLE_ENABLE           1U
+/* RS422 串口3示例开关：0 为不运行示例，1 为通过 U10/USART3 周期发包并轮询接收。 */
+#define RS422_UART3_EXAMPLE_ENABLE           1U
 
 #if (RS422_UART1_EXAMPLE_ENABLE != 0U)
 #define RS422_UART1_EXAMPLE_INTERVAL_MS      1000U
 #define RS422_UART1_EXAMPLE_TX_TIMEOUT_MS    200U
 #define RS422_UART1_EXAMPLE_ID               1U
+#endif
+#if (RS422_UART3_EXAMPLE_ENABLE != 0U)
+#define RS422_UART3_EXAMPLE_INTERVAL_MS      1000U
+#define RS422_UART3_EXAMPLE_TX_TIMEOUT_MS    200U
+#define RS422_UART3_EXAMPLE_ID               2U
 #endif
 /* USER CODE END PD */
 
@@ -105,6 +113,15 @@ HAL_StatusTypeDef rs422_uart1_example_tx_status = HAL_OK;
 RS422_ProtocolStatus rs422_uart1_example_rx_status = RS422_PROTOCOL_STATUS_NO_FRAME;
 uint32_t rs422_uart1_example_tx_count = 0U;
 #endif
+#if (RS422_UART3_EXAMPLE_ENABLE != 0U)
+/* RS422 串口3示例变量：用于 Keil Watch 观察 USART3/U10 的协议收发结果。 */
+uint8_t rs422_uart3_example_tx_data[RS422_PROTOCOL_DATA_LENGTH] = {0U};
+RS422_ProtocolPacket rs422_uart3_example_rx_packet = {0U};
+RS422_ProtocolStats rs422_uart3_example_stats = {0U};
+HAL_StatusTypeDef rs422_uart3_example_tx_status = HAL_OK;
+RS422_ProtocolStatus rs422_uart3_example_rx_status = RS422_PROTOCOL_STATUS_NO_FRAME;
+uint32_t rs422_uart3_example_tx_count = 0U;
+#endif
 
 /* USER CODE END PV */
 
@@ -123,6 +140,10 @@ static void RS422_ProtocolTestPrintPacket(const char *name,
 #if (RS422_UART1_EXAMPLE_ENABLE != 0U)
 static void RS422_Uart1ExampleInit(void);
 static void RS422_Uart1ExampleRun(void);
+#endif
+#if (RS422_UART3_EXAMPLE_ENABLE != 0U)
+static void RS422_Uart3ExampleInit(void);
+static void RS422_Uart3ExampleRun(void);
 #endif
 
 /* USER CODE END PFP */
@@ -308,6 +329,62 @@ static void RS422_Uart1ExampleRun(void)
 }
 #endif
 
+#if (RS422_UART3_EXAMPLE_ENABLE != 0U)
+/**
+  * @brief  初始化 RS422 串口3示例数据，串口3在本工程中对应 U10/USART3/J13。
+  * @retval None
+  */
+static void RS422_Uart3ExampleInit(void)
+{
+  uint16_t index;
+
+  for (index = 0U; index < RS422_PROTOCOL_DATA_LENGTH; index++)
+  {
+    /* 示例数据使用递减字节，便于和串口1的递增数据区分观察。 */
+    rs422_uart3_example_tx_data[index] = (uint8_t)(0xFFU - index);
+  }
+
+  RS422_ProtocolClearStats(RS422_PORT_U10);
+}
+
+/**
+  * @brief  RS422 串口3协议收发示例：周期发送一帧，同时轮询接收完整协议包。
+  * @note   串口3对应 RS422_PORT_U10；收到 OK 后可在此处添加业务处理逻辑。
+  * @retval None
+  */
+static void RS422_Uart3ExampleRun(void)
+{
+  static uint32_t last_tx_tick = 0U;
+  uint32_t now = HAL_GetTick();
+
+  rs422_uart3_example_rx_status =
+      RS422_ProtocolPoll(RS422_PORT_U10, &rs422_uart3_example_rx_packet);
+  RS422_ProtocolGetStats(RS422_PORT_U10, &rs422_uart3_example_stats);
+
+  if (rs422_uart3_example_rx_status == RS422_PROTOCOL_STATUS_OK)
+  {
+    /* 收到完整协议包后，在这里处理 rs422_uart3_example_rx_packet.data。 */
+  }
+
+  if ((now - last_tx_tick) < RS422_UART3_EXAMPLE_INTERVAL_MS)
+  {
+    return;
+  }
+  last_tx_tick = now;
+
+  rs422_uart3_example_tx_status =
+      RS422_ProtocolSend(RS422_PORT_U10,
+                         RS422_UART3_EXAMPLE_ID,
+                         (uint8_t)RS422_PROTOCOL_TYPE_AA,
+                         rs422_uart3_example_tx_data,
+                         RS422_UART3_EXAMPLE_TX_TIMEOUT_MS);
+  if (rs422_uart3_example_tx_status == HAL_OK)
+  {
+    rs422_uart3_example_tx_count++;
+  }
+}
+#endif
+
 /* USER CODE END 0 */
 
 /**
@@ -348,14 +425,20 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
+  MX_UART7_Init();
   MX_SPI2_Init();
   MX_SPI4_Init();
   /* USER CODE BEGIN 2 */
   ADS7951_Init();
   RS422_Init();
+  HostComm_Init();
 #if (RS422_UART1_EXAMPLE_ENABLE != 0U)
   /* 示例模式只使用串口1/U9，正常运行时该宏保持 0，不主动发送示例协议帧。 */
   RS422_Uart1ExampleInit();
+#endif
+#if (RS422_UART3_EXAMPLE_ENABLE != 0U)
+  /* 示例模式使用串口3/U10，正常运行时该宏保持 0，不主动发送示例协议帧。 */
+  RS422_Uart3ExampleInit();
 #endif
 #if (RS422_PROTOCOL_TEST_ENABLE != 0U)
   /* 测试模式下清空协议统计并准备固定测试数据，正常运行时不主动发测试帧。 */
@@ -388,8 +471,18 @@ int main(void)
     RS422_ProtocolTestRun();
 #endif
 #if (RS422_UART1_EXAMPLE_ENABLE != 0U)
-    RS422_Uart1ExampleRun();
+    if (host_comm_uart1_enabled != 0U)
+    {
+      RS422_Uart1ExampleRun();
+    }
 #endif
+#if (RS422_UART3_EXAMPLE_ENABLE != 0U)
+    if (host_comm_uart3_enabled != 0U)
+    {
+      RS422_Uart3ExampleRun();
+    }
+#endif
+    HostComm_Poll();
   }
   /* USER CODE END 3 */
 }
@@ -448,8 +541,8 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_USART3|RCC_PERIPHCLK_USART2
-                              |RCC_PERIPHCLK_USART1|RCC_PERIPHCLK_SPI4
+  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_UART7|RCC_PERIPHCLK_USART3
+                              |RCC_PERIPHCLK_USART2|RCC_PERIPHCLK_USART1|RCC_PERIPHCLK_SPI4
                               |RCC_PERIPHCLK_SPI3|RCC_PERIPHCLK_SPI2;
   PeriphClkInitStruct.Spi123ClockSelection = RCC_SPI123CLKSOURCE_PLL;
   PeriphClkInitStruct.Spi45ClockSelection = RCC_SPI45CLKSOURCE_D2PCLK1;

@@ -1,4 +1,5 @@
 #include "rs422.h"
+#include "host_comm.h"
 #include "usart.h"
 
 typedef struct
@@ -551,6 +552,7 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     RS422_UART_RxCpltCallback(huart);
+    HostComm_UART_RxCpltCallback(huart);
 }
 
 /**
@@ -561,6 +563,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
     RS422_UART_ErrorCallback(huart);
+    HostComm_UART_ErrorCallback(huart);
 }
 
 /**
@@ -571,4 +574,5 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 void HAL_UART_AbortReceiveCpltCallback(UART_HandleTypeDef *huart)
 {
     RS422_UART_AbortReceiveCpltCallback(huart);
+    HostComm_UART_AbortReceiveCpltCallback(huart);
 }

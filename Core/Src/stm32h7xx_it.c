@@ -254,5 +254,14 @@ void USART3_IRQHandler(void)
   HAL_UART_IRQHandler(&huart3);
 }
 
+/**
+  * @brief  UART7 中断处理函数，对应上位机通讯接口 PE7/PE8。
+  * @retval None
+  */
+void UART7_IRQHandler(void)
+{
+  HAL_UART_IRQHandler(&huart7);
+}
+
 /* USER CODE END 1 */
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

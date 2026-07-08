@@ -410,6 +410,11 @@
               <FilePath>..\Core\Inc\rs422_protocol.h</FilePath>
             </File>
             <File>
+              <FileName>host_comm.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Core\Inc\host_comm.h</FilePath>
+            </File>
+            <File>
               <FileName>ads7951.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Core\Inc\ads7951.h</FilePath>
@@ -433,6 +438,11 @@
               <FileName>rs422_protocol.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Core\Src\rs422_protocol.c</FilePath>
+            </File>
+            <File>
+              <FileName>host_comm.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\host_comm.c</FilePath>
             </File>
             <File>
               <FileName>main.c</FileName>
