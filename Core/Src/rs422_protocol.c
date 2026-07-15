@@ -24,7 +24,7 @@ typedef struct
     uint16_t index;//接收缓冲区索引
 } RS422_ProtocolParser;//协议解析器
 
-static RS422_ProtocolParser rs422_protocol_parser[RS422_PORT_COUNT];
+static RS422_ProtocolParser rs422_protocol_parser[RS422_PORT_COUNT];//协议解析器数组
 
 /* 以下统计变量用于接收侧诊断，误码率单位为 ppm。 */
 volatile uint32_t rs422_protocol_rx_total_bytes[RS422_PORT_COUNT] = {0U};//接收总字节数
@@ -220,6 +220,32 @@ HAL_StatusTypeDef RS422_ProtocolSend(RS422_PortId port,
     return RS422_Transmit(port, frame, RS422_PROTOCOL_FRAME_LENGTH, timeout);
 }
 
+HAL_StatusTypeDef RS422_ProtocolSend_IT(RS422_PortId port,
+                                         uint8_t id,
+                                         uint8_t data_type,
+                                         const uint8_t data[RS422_PROTOCOL_DATA_LENGTH])
+{
+    uint8_t frame[RS422_PROTOCOL_FRAME_LENGTH];
+    HAL_StatusTypeDef status;
+
+    if (RS422_ProtocolIsValidPort(port) == 0U)
+    {
+        return HAL_ERROR;
+    }
+
+    status = RS422_ProtocolBuildFrame(id,
+                                      data_type,
+                                      (uint8_t)RS422_PROTOCOL_DIR_TX,
+                                      data,
+                                      frame);
+    if (status != HAL_OK)
+    {
+        return status;
+    }
+
+    return RS422_Transmit_IT(port, frame, RS422_PROTOCOL_FRAME_LENGTH);
+}
+
 /**
   * @brief  解码一帧完整 RS422 协议数据并检查字段和校验位。
   * @param  frame: 输入的 135 字节完整协议帧。
@@ -271,7 +297,7 @@ RS422_ProtocolStatus RS422_ProtocolDecodeFrame(const uint8_t frame[RS422_PROTOCO
     (void)memcpy(packet->data,
                  &frame[RS422_PROTOCOL_DATA_OFFSET],
                  RS422_PROTOCOL_DATA_LENGTH);
-    packet->checksum = frame[RS422_PROTOCOL_CHECKSUM_OFFSET];
+    packet->checksum = frame    [RS422_PROTOCOL_CHECKSUM_OFFSET];
 
     return RS422_PROTOCOL_STATUS_OK;
 }
@@ -286,7 +312,7 @@ RS422_ProtocolStatus RS422_ProtocolPoll(RS422_PortId port, RS422_ProtocolPacket 
 {
     uint8_t byte;
     uint16_t read_size;
-    RS422_ProtocolParser *parser;
+    RS422_ProtocolParser *parser;//协议解析器指针
     RS422_ProtocolStatus status = RS422_PROTOCOL_STATUS_NO_FRAME;
 
     if (RS422_ProtocolIsValidPort(port) == 0U)

@@ -410,6 +410,16 @@
               <FilePath>..\Core\Inc\rs422_protocol.h</FilePath>
             </File>
             <File>
+              <FileName>rs485_speed_test.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Core\Inc\rs485_speed_test.h</FilePath>
+            </File>
+            <File>
+              <FileName>rs485_speed_test_wire.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Core\Inc\rs485_speed_test_wire.h</FilePath>
+            </File>
+            <File>
               <FileName>host_comm.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Core\Inc\host_comm.h</FilePath>
@@ -438,6 +448,11 @@
               <FileName>rs422_protocol.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Core\Src\rs422_protocol.c</FilePath>
+            </File>
+            <File>
+              <FileName>rs485_speed_test.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\rs485_speed_test.c</FilePath>
             </File>
             <File>
               <FileName>host_comm.c</FileName>

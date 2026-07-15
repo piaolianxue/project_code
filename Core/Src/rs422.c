@@ -8,6 +8,7 @@ typedef struct
     GPIO_TypeDef *tx_en_port;
     uint16_t tx_en_pin;
     GPIO_PinState tx_en_active;
+    IRQn_Type irqn;
 } RS422_PortConfig;
 
 typedef struct
@@ -20,23 +21,25 @@ typedef struct
     uint8_t rx_byte;
     uint8_t tx_byte;
     volatile uint8_t tx_busy;
-} RS422_PortState;
+} RS422_PortState;// RS422 端口状态
 
 static const RS422_PortConfig rs422_config[RS422_PORT_COUNT] =
 {
     /* TX_EN_x 的有效电平决定收发器进入发送模式时输出的方向控制电平。 */
     {
         &huart1,
-        TX_EN_1_GPIO_Port, TX_EN_1_Pin, GPIO_PIN_SET
+        TX_EN_1_GPIO_Port, TX_EN_1_Pin, GPIO_PIN_SET,
+        USART1_IRQn
     },
     {
         /* U10 的 THVD1452 实际接到 UART3_RX/TX，因此这里使用 USART3 句柄。 */
         &huart3,
-        TX_EN_2_GPIO_Port, TX_EN_2_Pin, GPIO_PIN_SET
+        TX_EN_2_GPIO_Port, TX_EN_2_Pin, GPIO_PIN_SET,
+        USART3_IRQn
     }
 };
 
-static RS422_PortState rs422_state[RS422_PORT_COUNT];
+static RS422_PortState rs422_state[RS422_PORT_COUNT];// RS422 端口状态数组
 static uint8_t rs422_rx_buffer[RS422_PORT_COUNT][RS422_RX_BUFFER_SIZE];
 static uint8_t rs422_tx_buffer[RS422_PORT_COUNT][RS422_TX_BUFFER_SIZE];
 
@@ -47,7 +50,12 @@ volatile uint32_t rs422_diag_error_count[RS422_PORT_COUNT] = {0U};
 volatile uint32_t rs422_diag_abort_count[RS422_PORT_COUNT] = {0U};// 异常中止次数
 volatile uint32_t rs422_diag_last_error_code[RS422_PORT_COUNT] = {0U};
 volatile uint32_t rs422_diag_last_rx_byte[RS422_PORT_COUNT] = {0U};
-volatile uint32_t rs422_diag_start_receive_status[RS422_PORT_COUNT] = {0U};
+volatile uint32_t rs422_diag_start_receive_status[RS422_PORT_COUNT] = {0U};// HAL_UART_Receive_IT 返回值
+volatile uint32_t rs422_diag_rx_overflow_count[RS422_PORT_COUNT] = {0U};
+volatile uint32_t rs422_diag_tx_overflow_count[RS422_PORT_COUNT] = {0U};
+volatile uint32_t rs422_diag_tx_total_bytes[RS422_PORT_COUNT] = {0U};
+volatile uint32_t rs422_diag_requested_baud[RS422_PORT_COUNT] = {0U};
+volatile uint32_t rs422_diag_actual_baud[RS422_PORT_COUNT] = {0U};
 
 /**
   * @brief  判断 RS422 端口编号是否在有效范围内。
@@ -121,6 +129,10 @@ static void RS422_RxPush(RS422_PortId port, uint8_t data)
         rs422_rx_buffer[port][state->rx_head] = data;
         state->rx_head = next;
     }
+    else
+    {
+        rs422_diag_rx_overflow_count[port]++;
+    }
 }
 
 /**
@@ -183,7 +195,7 @@ static void RS422_KickTx(RS422_PortId port)
         return;
     }
 
-    if (RS422_TxPop(port, &state->tx_byte) == 0U)
+    if (RS422_TxPop(port, &state->tx_byte) == 0U)// 发送缓冲区为空
     {
         RS422_SetReceiveMode(port);
         return;
@@ -219,6 +231,148 @@ static RS422_PortId RS422_FindPortByUart(UART_HandleTypeDef *huart)
     return RS422_PORT_COUNT;
 }
 
+static uint32_t RS422_GetKernelClock(UART_HandleTypeDef *huart)
+{
+    UART_ClockSourceTypeDef clocksource;
+    PLL2_ClocksTypeDef pll2_clocks;
+    PLL3_ClocksTypeDef pll3_clocks;
+
+    UART_GETCLOCKSOURCE(huart, clocksource);
+
+    switch (clocksource)
+    {
+        case UART_CLOCKSOURCE_D2PCLK1:
+            return HAL_RCC_GetPCLK1Freq();
+
+        case UART_CLOCKSOURCE_D2PCLK2:
+            return HAL_RCC_GetPCLK2Freq();
+
+        case UART_CLOCKSOURCE_PLL2:
+            HAL_RCCEx_GetPLL2ClockFreq(&pll2_clocks);
+            return pll2_clocks.PLL2_Q_Frequency;
+
+        case UART_CLOCKSOURCE_PLL3:
+            HAL_RCCEx_GetPLL3ClockFreq(&pll3_clocks);
+            return pll3_clocks.PLL3_Q_Frequency;
+
+        case UART_CLOCKSOURCE_HSI:
+            if (__HAL_RCC_GET_FLAG(RCC_FLAG_HSIDIV) != 0U)
+            {
+                return (uint32_t)(HSI_VALUE >> (__HAL_RCC_GET_HSI_DIVIDER() >> 3U));
+            }
+            return (uint32_t)HSI_VALUE;
+
+        case UART_CLOCKSOURCE_CSI:
+            return (uint32_t)CSI_VALUE;
+
+        case UART_CLOCKSOURCE_LSE:
+            return (uint32_t)LSE_VALUE;
+
+        default:
+            return 0U;
+    }
+}
+
+static void RS422_ResetPortState(RS422_PortId port)
+{
+    rs422_state[port].rx_head = 0U;
+    rs422_state[port].rx_tail = 0U;
+    rs422_state[port].tx_head = 0U;
+    rs422_state[port].tx_tail = 0U;
+    rs422_state[port].tx_busy = 0U;
+}
+
+static uint32_t RS422_CalcActualBaud(UART_HandleTypeDef *huart, uint32_t clock);
+
+static uint32_t RS422_ReadActualBaud(UART_HandleTypeDef *huart)
+{
+    uint32_t clock;
+
+    clock = RS422_GetKernelClock(huart);
+    if (clock == 0U)
+    {
+        return huart->Init.BaudRate;
+    }
+
+    return RS422_CalcActualBaud(huart, clock);
+}
+
+static void RS422_UpdateBaudDiagnostics(RS422_PortId port)
+{
+    rs422_diag_requested_baud[port] = rs422_config[port].huart->Init.BaudRate;
+    rs422_diag_actual_baud[port] = RS422_ReadActualBaud(rs422_config[port].huart);
+}
+
+static uint32_t RS422_GetEffectivePrescaler(UART_HandleTypeDef *huart)
+{
+    uint32_t index = (uint32_t)huart->Init.ClockPrescaler;
+
+    if (index < (uint32_t)(sizeof(UARTPrescTable) / sizeof(UARTPrescTable[0])))
+    {
+        return UARTPrescTable[index];
+    }
+
+    return 1U;
+}
+
+static uint32_t RS422_CalcActualBaud(UART_HandleTypeDef *huart, uint32_t clock)
+{
+    uint32_t prescaler;
+    uint64_t scaled_clock;
+    uint32_t usartdiv;
+
+    if (clock == 0U)
+    {
+        return 0U;
+    }
+
+    prescaler = RS422_GetEffectivePrescaler(huart);
+    if (prescaler == 0U)
+    {
+        return 0U;
+    }
+
+    scaled_clock = (uint64_t)clock / (uint64_t)prescaler;
+    if (scaled_clock == 0ULL)
+    {
+        return 0U;
+    }
+
+    if (UART_INSTANCE_LOWPOWER(huart))
+    {
+        usartdiv = huart->Instance->BRR;
+        if (usartdiv == 0U)
+        {
+            return 0U;
+        }
+
+        return (uint32_t)(((scaled_clock * 256ULL) + ((uint64_t)usartdiv / 2ULL)) /
+                          (uint64_t)usartdiv);
+    }
+
+    if (huart->Init.OverSampling == UART_OVERSAMPLING_8)
+    {
+        usartdiv = (uint32_t)((huart->Instance->BRR & 0xFFF0U) |
+                              ((huart->Instance->BRR & 0x0007U) << 1U));
+        if (usartdiv == 0U)
+        {
+            return 0U;
+        }
+
+        return (uint32_t)((((scaled_clock * 2ULL) + ((uint64_t)usartdiv / 2ULL)) /
+                           (uint64_t)usartdiv));
+    }
+
+    usartdiv = huart->Instance->BRR;
+    if (usartdiv == 0U)
+    {
+        return 0U;
+    }
+
+    return (uint32_t)((scaled_clock + ((uint64_t)usartdiv / 2ULL)) /
+                      (uint64_t)usartdiv);
+}
+
 /**
   * @brief  初始化全部 RS422 端口状态并启动中断接收。
   * @retval None
@@ -229,19 +383,19 @@ void RS422_Init(void)
 
     for (port = (RS422_PortId)0; port < RS422_PORT_COUNT; port++)
     {
-        rs422_state[port].rx_head = 0U;
-        rs422_state[port].rx_tail = 0U;
-        rs422_state[port].tx_head = 0U;
-        rs422_state[port].tx_tail = 0U;
-        rs422_state[port].tx_busy = 0U;
+        RS422_ResetPortState(port);
         rs422_diag_tx_complete_count[port] = 0U;
         rs422_diag_rx_complete_count[port] = 0U;
         rs422_diag_error_count[port] = 0U;
         rs422_diag_abort_count[port] = 0U;
+        rs422_diag_rx_overflow_count[port] = 0U;
+        rs422_diag_tx_overflow_count[port] = 0U;
+        rs422_diag_tx_total_bytes[port] = 0U;
         rs422_diag_last_error_code[port] = 0U;
         rs422_diag_last_rx_byte[port] = 0U;
         rs422_diag_start_receive_status[port] = 0U;
         RS422_SetReceiveMode(port);
+        RS422_UpdateBaudDiagnostics(port);
     }
 
     (void)RS422_StartReceiveAll();
@@ -314,6 +468,7 @@ HAL_StatusTypeDef RS422_Transmit_IT(RS422_PortId port, const uint8_t *data, uint
     __disable_irq();
     if (RS422_RingFree(state->tx_head, state->tx_tail, RS422_TX_BUFFER_SIZE) < size)
     {
+        rs422_diag_tx_overflow_count[port]++;
         __enable_irq();
         return HAL_BUSY;
     }
@@ -323,6 +478,7 @@ HAL_StatusTypeDef RS422_Transmit_IT(RS422_PortId port, const uint8_t *data, uint
         rs422_tx_buffer[port][state->tx_head] = data[index];
         state->tx_head = RS422_RingNext(state->tx_head, RS422_TX_BUFFER_SIZE);
     }
+    rs422_diag_tx_total_bytes[port] += size;
     __enable_irq();
 
     RS422_KickTx(port);
@@ -357,6 +513,87 @@ HAL_StatusTypeDef RS422_Transmit(RS422_PortId port, const uint8_t *data, uint16_
     }
 
     return HAL_OK;
+}
+
+HAL_StatusTypeDef RS422_SetBaudRate(RS422_PortId port, uint32_t baud_rate)
+{
+    UART_HandleTypeDef *huart;
+    HAL_StatusTypeDef status;
+    uint32_t old_baud_rate;
+    uint8_t irq_was_enabled;
+
+    if ((RS422_IsValidPort(port) == 0U) || (baud_rate == 0U))
+    {
+        return HAL_ERROR;
+    }
+
+    huart = rs422_config[port].huart;
+    old_baud_rate = huart->Init.BaudRate;
+    irq_was_enabled = (uint8_t)((NVIC_GetEnableIRQ(rs422_config[port].irqn) != 0U) ? 1U : 0U);
+
+    HAL_NVIC_DisableIRQ(rs422_config[port].irqn);
+    (void)HAL_UART_Abort(huart);
+    RS422_ResetPortState(port);
+    RS422_SetReceiveMode(port);
+
+    huart->Init.BaudRate = baud_rate;
+    status = HAL_UART_Init(huart);
+    if (status != HAL_OK)
+    {
+        huart->Init.BaudRate = old_baud_rate;
+        (void)HAL_UART_Init(huart);
+        RS422_UpdateBaudDiagnostics(port);
+        (void)RS422_StartReceive(port);
+        if (irq_was_enabled != 0U)
+        {
+            NVIC_ClearPendingIRQ(rs422_config[port].irqn);
+            HAL_NVIC_EnableIRQ(rs422_config[port].irqn);
+        }
+        return status;
+    }
+
+    RS422_UpdateBaudDiagnostics(port);
+    if (irq_was_enabled != 0U)
+    {
+        NVIC_ClearPendingIRQ(rs422_config[port].irqn);
+        HAL_NVIC_EnableIRQ(rs422_config[port].irqn);
+    }
+
+    return RS422_StartReceive(port);
+}
+
+uint32_t RS422_GetRequestedBaudRate(RS422_PortId port)
+{
+    if (RS422_IsValidPort(port) == 0U)
+    {
+        return 0U;
+    }
+
+    return rs422_diag_requested_baud[port];
+}
+
+uint32_t RS422_GetActualBaudRate(RS422_PortId port)
+{
+    if (RS422_IsValidPort(port) == 0U)
+    {
+        return 0U;
+    }
+
+    RS422_UpdateBaudDiagnostics(port);
+    return rs422_diag_actual_baud[port];
+}
+
+void RS422_ClearTx(RS422_PortId port)
+{
+    if (RS422_IsValidPort(port) == 0U)
+    {
+        return;
+    }
+
+    __disable_irq();
+    rs422_state[port].tx_head = 0U;
+    rs422_state[port].tx_tail = 0U;
+    __enable_irq();
 }
 
 /**
@@ -402,7 +639,7 @@ uint16_t RS422_Read(RS422_PortId port, uint8_t *data, uint16_t max_size)
     while (count < max_size)
     {
         __disable_irq();
-        if (state->rx_head == state->rx_tail)
+        if (state->rx_head == state->rx_tail)// 读取缓冲区为空
         {
             __enable_irq();
             break;
