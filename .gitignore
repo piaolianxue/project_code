@@ -1,5 +1,6 @@
 .agents/
 .codex/
+.worktrees/
 codex-mcp.sqlite
 
 # Local build and helper output
