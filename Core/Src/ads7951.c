@@ -13,10 +13,10 @@ static uint16_t ADS7951_BuildManualCommand(uint8_t channel)
 {
     return ADS7951_MODE_MANUAL |
            ADS7951_PROG_RANGE_GPIO |
-           (((uint16_t)(channel & ADS7951_CHANNEL_MASK)) << 7) |
+           (((uint16_t)(channel & ADS7951_CHANNEL_MASK)) << 7) |// 通道号移位到高位
            ADS7951_RANGE_VREF |
            ADS7951_POWER_NORMAL |
-           ADS7951_OUTPUT_CHANNEL;
+           ADS7951_OUTPUT_CHANNEL;// 输出数据中包含通道编号信息
 }
 
 /**

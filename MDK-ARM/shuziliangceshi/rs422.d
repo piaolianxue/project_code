@@ -1,42 +1,32 @@
-shuziliangceshi\rs422.o: ..\Core\Src\rs422.c
-shuziliangceshi\rs422.o: ../Core/Inc/rs422.h
-shuziliangceshi\rs422.o: ../Core/Inc/main.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h
-shuziliangceshi\rs422.o: ../Core/Inc/stm32h7xx_hal_conf.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_rcc.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_def.h
-shuziliangceshi\rs422.o: ../Drivers/CMSIS/Device/ST/STM32H7xx/Include/stm32h7xx.h
-shuziliangceshi\rs422.o: ../Drivers/CMSIS/Device/ST/STM32H7xx/Include/stm32h743xx.h
-shuziliangceshi\rs422.o: ../Drivers/CMSIS/Include/core_cm7.h
-shuziliangceshi\rs422.o: E:\Software\Software_Work\Keil_V5\ARM\ARMCC\Bin\..\include\stdint.h
-shuziliangceshi\rs422.o: ../Drivers/CMSIS/Include/cmsis_version.h
-shuziliangceshi\rs422.o: ../Drivers/CMSIS/Include/cmsis_compiler.h
-shuziliangceshi\rs422.o: ../Drivers/CMSIS/Include/cmsis_armcc.h
-shuziliangceshi\rs422.o: ../Drivers/CMSIS/Include/mpu_armv7.h
-shuziliangceshi\rs422.o: ../Drivers/CMSIS/Device/ST/STM32H7xx/Include/system_stm32h7xx.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy/stm32_hal_legacy.h
-shuziliangceshi\rs422.o: E:\Software\Software_Work\Keil_V5\ARM\ARMCC\Bin\..\include\stddef.h
-shuziliangceshi\rs422.o: E:\Software\Software_Work\Keil_V5\ARM\ARMCC\Bin\..\include\math.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_rcc_ex.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_gpio.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_gpio_ex.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_dma.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_dma_ex.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_mdma.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_exti.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_cortex.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_flash.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_flash_ex.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_hsem.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_i2c.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_i2c_ex.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pwr.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_pwr_ex.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_spi.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_spi_ex.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h
-shuziliangceshi\rs422.o: ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h
-shuziliangceshi\rs422.o: ../Core/Inc/usart.h
+shuziliangceshi/rs422.o: ..\Core\Src\rs422.c ..\Core\Inc\rs422.h \
+  ..\Core\Inc\main.h ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal.h \
+  ..\Core\Inc\stm32h7xx_hal_conf.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_rcc.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_def.h \
+  ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\stm32h7xx.h \
+  ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\stm32h743xx.h \
+  ..\Drivers\CMSIS\Include\core_cm7.h \
+  ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\system_stm32h7xx.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\Legacy\stm32_hal_legacy.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_rcc_ex.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_gpio.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_gpio_ex.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_dma.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_dma_ex.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_mdma.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_exti.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_cortex.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_flash.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_flash_ex.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_hsem.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_i2c.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_i2c_ex.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_pwr.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_pwr_ex.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_spi.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_spi_ex.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_tim.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_tim_ex.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart.h \
+  ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_uart_ex.h \
+  ..\Core\Inc\host_comm.h ..\Core\Inc\usart.h
