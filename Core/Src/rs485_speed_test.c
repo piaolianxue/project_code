@@ -3,84 +3,203 @@
 
 #include <string.h>
 
-typedef struct
-{
-    RS422_PortId port;
-    uint8_t wire_index;
-} RS485_SpeedTestConfig;
+#define RS485_SPEED_TEST_PORT               RS422_PORT_U9
 
 typedef struct
 {
-    uint8_t active;
-    RS485_SpeedTestState state;
-    uint32_t baudrate;
-    uint32_t actual_baudrate;
-    uint32_t sequence;
-    uint32_t wait_sequence;
-    uint32_t last_rx_sequence;
-    uint32_t wait_deadline_tick;
-    uint8_t waiting_echo;
+    uint8_t enabled;
+    uint8_t slave_id;
     uint32_t tx_frames;
     uint32_t rx_frames;
     uint32_t echo_frames;
     uint32_t timeout_count;
     uint32_t protocol_error_count;
     uint32_t app_error_count;
+    uint32_t last_rx_sequence;
     uint32_t last_status;
     uint32_t last_hal_status;
-    RS422_ProtocolPacket packet;
-    RS422_ProtocolStats protocol_stats;
-} RS485_SpeedTestInstance;
+} RS485_SpeedTestSlaveStats;
 
-static const RS485_SpeedTestConfig rs485_speed_test_config[RS485_SPEED_TEST_INSTANCE_COUNT] =
+const uint32_t rs485_speed_test_baud_table[RS485_SPEED_TEST_BAUD_COUNT] =
 {
-    { RS422_PORT_U9, 0U },
-    { RS422_PORT_U10, 0U }
+    RS485_SPEED_TEST_DEFAULT_BAUDRATE
 };
 
-static RS485_SpeedTestInstance rs485_speed_test_instance[RS485_SPEED_TEST_INSTANCE_COUNT];
+const uint8_t rs485_speed_test_master_slave_table[RS485_SPEED_TEST_MASTER_SLAVE_COUNT] =
+{
+    1U,
+    2U
+};
 
-static uint8_t RS485_SpeedTestIsValidInstance(RS485_SpeedTestInstanceId instance)
+volatile uint32_t rs485_speed_test_local_node_id = RS485_SPEED_TEST_LOCAL_NODE_ID;
+volatile uint32_t rs485_speed_test_current_slave_id = 1U;
+volatile uint32_t rs485_speed_test_current_slave_index = 0U;
+volatile uint32_t rs485_speed_test_ignored_node_frames = 0U;
+volatile uint32_t rs485_speed_test_role = (uint32_t)RS485_SPEED_TEST_DEFAULT_ROLE;
+volatile uint32_t rs485_speed_test_state = (uint32_t)RS485_SPEED_TEST_STATE_IDLE;
+volatile uint32_t rs485_speed_test_current_index = 0U;
+volatile uint32_t rs485_speed_test_current_baud = RS485_SPEED_TEST_DEFAULT_BAUDRATE;
+volatile uint32_t rs485_speed_test_current_actual_baud = 0U;
+volatile uint32_t rs485_speed_test_next_baud = 0U;
+volatile uint32_t rs485_speed_test_best_stable_baud = 0U;
+volatile uint32_t rs485_speed_test_best_stable_actual_baud = 0U;
+volatile uint32_t rs485_speed_test_failed_baud = 0U;
+volatile uint32_t rs485_speed_test_window_elapsed_ms = 0U;
+volatile uint32_t rs485_speed_test_tx_frames = 0U;
+volatile uint32_t rs485_speed_test_rx_frames = 0U;
+volatile uint32_t rs485_speed_test_echo_frames = 0U;
+volatile uint32_t rs485_speed_test_timeout_count = 0U;
+volatile uint32_t rs485_speed_test_protocol_error_count = 0U;
+volatile uint32_t rs485_speed_test_app_error_count = 0U;
+volatile uint32_t rs485_speed_test_uart_error_count = 0U;
+volatile uint32_t rs485_speed_test_rx_overflow_count = 0U;
+volatile uint32_t rs485_speed_test_tx_overflow_count = 0U;
+volatile uint32_t rs485_speed_test_rx_bytes_per_second = 0U;
+volatile uint32_t rs485_speed_test_rx_bits_per_second = 0U;
+volatile uint32_t rs485_speed_test_payload_bits_per_second = 0U;
+volatile uint32_t rs485_speed_test_protocol_error_rate_ppm = 0U;
+volatile uint32_t rs485_speed_test_sequence = 1U;
+volatile uint32_t rs485_speed_test_last_rx_sequence = 0U;
+volatile uint32_t rs485_speed_test_last_rx_command = 0U;
+volatile uint32_t rs485_speed_test_last_status = (uint32_t)RS422_PROTOCOL_STATUS_NO_FRAME;
+volatile uint32_t rs485_speed_test_last_hal_status = (uint32_t)HAL_OK;
+volatile uint32_t rs485_speed_test_waiting_echo = 0U;
+volatile uint32_t rs485_speed_test_stable = 0U;
+
+static RS422_ProtocolPacket rs485_speed_test_packet;
+static RS422_ProtocolStats rs485_speed_test_protocol_stats;
+static RS485_SpeedTestSlaveStats rs485_speed_test_slave_stats[RS485_SPEED_TEST_MASTER_SLAVE_COUNT];
+static uint32_t rs485_speed_test_wait_sequence;
+static uint32_t rs485_speed_test_wait_deadline_tick;
+static uint32_t rs485_speed_test_window_start_tick;
+static uint32_t rs485_speed_test_last_sample_tick;
+static uint32_t rs485_speed_test_last_sample_bytes;
+static uint8_t rs485_speed_test_running;
+
+static uint32_t RS485_GetU32(const uint8_t *data, uint16_t offset)
+{
+    return ((uint32_t)data[offset]) |
+           ((uint32_t)data[(uint16_t)(offset + 1U)] << 8U) |
+           ((uint32_t)data[(uint16_t)(offset + 2U)] << 16U) |
+           ((uint32_t)data[(uint16_t)(offset + 3U)] << 24U);
+}
+
+static void RS485_PutU32(uint8_t *data, uint16_t offset, uint32_t value)
+{
+    data[offset] = (uint8_t)(value & 0xFFU);
+    data[(uint16_t)(offset + 1U)] = (uint8_t)((value >> 8U) & 0xFFU);
+    data[(uint16_t)(offset + 2U)] = (uint8_t)((value >> 16U) & 0xFFU);
+    data[(uint16_t)(offset + 3U)] = (uint8_t)((value >> 24U) & 0xFFU);
+}
+
+static uint8_t RS485_SpeedTestInstanceIsValid(RS485_SpeedTestInstanceId instance)
 {
     return ((uint32_t)instance < (uint32_t)RS485_SPEED_TEST_INSTANCE_COUNT) ? 1U : 0U;
 }
 
-static uint32_t RS485_GetU32(const uint8_t *buffer, uint16_t offset)
+static uint8_t RS485_SpeedTestInstanceToSlaveIndex(RS485_SpeedTestInstanceId instance)
 {
-    return ((uint32_t)buffer[offset + 0U]) |
-           ((uint32_t)buffer[offset + 1U] << 8U) |
-           ((uint32_t)buffer[offset + 2U] << 16U) |
-           ((uint32_t)buffer[offset + 3U] << 24U);
+    if (instance == RS485_SPEED_TEST_INSTANCE_UART3)
+    {
+        return 1U;
+    }
+
+    return 0U;
 }
 
-static void RS485_PutU32(uint8_t *buffer, uint16_t offset, uint32_t value)
+static uint8_t RS485_SpeedTestSlaveIndexFromId(uint8_t slave_id)
 {
-    buffer[offset + 0U] = (uint8_t)(value & 0xFFU);
-    buffer[offset + 1U] = (uint8_t)((value >> 8U) & 0xFFU);
-    buffer[offset + 2U] = (uint8_t)((value >> 16U) & 0xFFU);
-    buffer[offset + 3U] = (uint8_t)((value >> 24U) & 0xFFU);
+    uint8_t index;
+
+    for (index = 0U; index < RS485_SPEED_TEST_MASTER_SLAVE_COUNT; index++)
+    {
+        if (rs485_speed_test_master_slave_table[index] == slave_id)
+        {
+            return index;
+        }
+    }
+
+    return RS485_SPEED_TEST_MASTER_SLAVE_COUNT;
 }
 
-static void RS485_SpeedTestBuildPayload(RS485_SpeedTestInstanceId instance,
-                                        uint8_t command,
+static uint8_t RS485_SpeedTestAnySlaveEnabled(void)
+{
+    uint8_t index;
+
+    for (index = 0U; index < RS485_SPEED_TEST_MASTER_SLAVE_COUNT; index++)
+    {
+        if (rs485_speed_test_slave_stats[index].enabled != 0U)
+        {
+            return 1U;
+        }
+    }
+
+    return 0U;
+}
+
+static uint8_t RS485_SpeedTestCurrentMasterSlaveId(void)
+{
+    uint8_t guard = 0U;
+
+    while (guard < RS485_SPEED_TEST_MASTER_SLAVE_COUNT)
+    {
+        if (rs485_speed_test_current_slave_index >= RS485_SPEED_TEST_MASTER_SLAVE_COUNT)
+        {
+            rs485_speed_test_current_slave_index = 0U;
+        }
+
+        if (rs485_speed_test_slave_stats[rs485_speed_test_current_slave_index].enabled != 0U)
+        {
+            return rs485_speed_test_master_slave_table[rs485_speed_test_current_slave_index];
+        }
+
+        rs485_speed_test_current_slave_index++;
+        guard++;
+    }
+
+    rs485_speed_test_current_slave_index = 0U;
+    return rs485_speed_test_master_slave_table[0U];
+}
+
+static void RS485_SpeedTestSetFirstMasterSlave(void)
+{
+    rs485_speed_test_current_slave_index = 0U;
+    rs485_speed_test_current_slave_id = RS485_SpeedTestCurrentMasterSlaveId();
+}
+
+static void RS485_SpeedTestAdvanceMasterSlave(void)
+{
+    rs485_speed_test_current_slave_index++;
+    if (rs485_speed_test_current_slave_index >= RS485_SPEED_TEST_MASTER_SLAVE_COUNT)
+    {
+        rs485_speed_test_current_slave_index = 0U;
+    }
+
+    rs485_speed_test_current_slave_id = RS485_SpeedTestCurrentMasterSlaveId();
+    rs485_speed_test_waiting_echo = 0U;
+}
+
+static void RS485_SpeedTestBuildPayload(uint8_t command,
+                                        uint8_t index,
+                                        uint32_t baud,
                                         uint32_t sequence,
+                                        uint32_t actual_baud,
                                         uint8_t data[RS422_PROTOCOL_DATA_LENGTH])
 {
     uint16_t offset;
-    RS485_SpeedTestInstance *item = &rs485_speed_test_instance[instance];
 
     (void)memset(data, 0, RS422_PROTOCOL_DATA_LENGTH);
     data[RS485_SPEED_PAYLOAD_MAGIC0_OFFSET] = RS485_SPEED_PAYLOAD_MAGIC0;
     data[RS485_SPEED_PAYLOAD_MAGIC1_OFFSET] = RS485_SPEED_PAYLOAD_MAGIC1;
     data[RS485_SPEED_PAYLOAD_VERSION_OFFSET] = RS485_SPEED_PAYLOAD_VERSION;
     data[RS485_SPEED_PAYLOAD_COMMAND_OFFSET] = command;
-    data[RS485_SPEED_PAYLOAD_INDEX_OFFSET] = rs485_speed_test_config[instance].wire_index;
-    data[RS485_SPEED_PAYLOAD_ROLE_OFFSET] = 0U;
+    data[RS485_SPEED_PAYLOAD_INDEX_OFFSET] = index;
+    data[RS485_SPEED_PAYLOAD_ROLE_OFFSET] = (uint8_t)rs485_speed_test_role;
     data[RS485_SPEED_PAYLOAD_FLAGS_OFFSET] = 0U;
-    RS485_PutU32(data, RS485_SPEED_PAYLOAD_BAUD_OFFSET, item->baudrate);
+    RS485_PutU32(data, RS485_SPEED_PAYLOAD_BAUD_OFFSET, baud);
     RS485_PutU32(data, RS485_SPEED_PAYLOAD_SEQUENCE_OFFSET, sequence);
     RS485_PutU32(data, RS485_SPEED_PAYLOAD_TICK_OFFSET, HAL_GetTick());
-    RS485_PutU32(data, RS485_SPEED_PAYLOAD_ACTUAL_BAUD_OFFSET, item->actual_baudrate);
+    RS485_PutU32(data, RS485_SPEED_PAYLOAD_ACTUAL_BAUD_OFFSET, actual_baud);
 
     for (offset = RS485_SPEED_PAYLOAD_PATTERN_OFFSET;
          offset < RS422_PROTOCOL_DATA_LENGTH;
@@ -90,7 +209,7 @@ static void RS485_SpeedTestBuildPayload(RS485_SpeedTestInstanceId instance,
     }
 }
 
-static uint8_t RS485_SpeedTestPayloadHeaderIsValid(const uint8_t data[RS422_PROTOCOL_DATA_LENGTH])
+static uint8_t RS485_SpeedTestPayloadIsValid(const uint8_t data[RS422_PROTOCOL_DATA_LENGTH])
 {
     if ((data[RS485_SPEED_PAYLOAD_MAGIC0_OFFSET] != RS485_SPEED_PAYLOAD_MAGIC0) ||
         (data[RS485_SPEED_PAYLOAD_MAGIC1_OFFSET] != RS485_SPEED_PAYLOAD_MAGIC1) ||
@@ -120,223 +239,349 @@ static uint8_t RS485_SpeedTestPatternIsValid(const uint8_t data[RS422_PROTOCOL_D
     return 1U;
 }
 
-static void RS485_SpeedTestClearInstance(RS485_SpeedTestInstanceId instance)
+static HAL_StatusTypeDef RS485_SpeedTestSendCommand(uint8_t target_node_id,
+                                                    uint8_t command,
+                                                    uint8_t index,
+                                                    uint32_t baud,
+                                                    uint32_t sequence,
+                                                    uint32_t actual_baud)
 {
-    RS485_SpeedTestInstance *item;
-    RS422_PortId port;
+    uint8_t payload[RS422_PROTOCOL_DATA_LENGTH];
+    HAL_StatusTypeDef status;
 
-    if (RS485_SpeedTestIsValidInstance(instance) == 0U)
+    RS485_SpeedTestBuildPayload(command, index, baud, sequence, actual_baud, payload);
+    status = RS422_ProtocolSend_IT(RS485_SPEED_TEST_PORT,
+                                   target_node_id,
+                                   RS485_SPEED_TEST_DATA_TYPE,
+                                   payload);
+    rs485_speed_test_last_hal_status = (uint32_t)status;
+    return status;
+}
+
+static void RS485_SpeedTestRefreshProtocolStats(void)
+{
+    RS422_ProtocolGetStats(RS485_SPEED_TEST_PORT, &rs485_speed_test_protocol_stats);
+    rs485_speed_test_current_actual_baud = RS422_GetActualBaudRate(RS485_SPEED_TEST_PORT);
+    rs485_speed_test_uart_error_count = rs422_diag_error_count[RS485_SPEED_TEST_PORT];
+    rs485_speed_test_rx_overflow_count = rs422_diag_rx_overflow_count[RS485_SPEED_TEST_PORT];
+    rs485_speed_test_tx_overflow_count = rs422_diag_tx_overflow_count[RS485_SPEED_TEST_PORT];
+    rs485_speed_test_protocol_error_rate_ppm = rs485_speed_test_protocol_stats.error_rate_ppm;
+}
+
+static void RS485_SpeedTestUpdateRateMeter(void)
+{
+    uint32_t now = HAL_GetTick();
+    uint32_t elapsed;
+    uint32_t delta_bytes;
+
+    if (rs485_speed_test_last_sample_tick == 0U)
+    {
+        rs485_speed_test_last_sample_tick = now;
+        rs485_speed_test_last_sample_bytes = rs485_speed_test_protocol_stats.total_bytes;
+        return;
+    }
+
+    elapsed = now - rs485_speed_test_last_sample_tick;
+    if (elapsed < 1000U)
     {
         return;
     }
 
-    item = &rs485_speed_test_instance[instance];
-    port = rs485_speed_test_config[instance].port;
-
-    RS422_ClearRx(port);
-    RS422_ClearTx(port);
-    RS422_ProtocolClearStats(port);
-    rs422_diag_tx_complete_count[port] = 0U;
-    rs422_diag_rx_complete_count[port] = 0U;
-    rs422_diag_error_count[port] = 0U;
-    rs422_diag_abort_count[port] = 0U;
-    rs422_diag_last_error_code[port] = 0U;
-    rs422_diag_last_rx_byte[port] = 0U;
-    rs422_diag_start_receive_status[port] = 0U;
-    rs422_diag_rx_overflow_count[port] = 0U;
-    rs422_diag_tx_overflow_count[port] = 0U;
-    rs422_diag_tx_total_bytes[port] = 0U;
-    rs422_diag_requested_baud[port] = 0U;
-    rs422_diag_actual_baud[port] = 0U;
-
-    (void)memset(item, 0, sizeof(*item));
-    item->state = RS485_SPEED_TEST_STATE_IDLE;
-    item->baudrate = RS485_SPEED_TEST_DEFAULT_BAUDRATE;
-    item->actual_baudrate = RS422_GetActualBaudRate(port);
-    item->last_status = (uint32_t)RS422_PROTOCOL_STATUS_NO_FRAME;
-    item->last_hal_status = (uint32_t)HAL_OK;
+    delta_bytes = rs485_speed_test_protocol_stats.total_bytes -
+                  rs485_speed_test_last_sample_bytes;
+    rs485_speed_test_rx_bytes_per_second = (delta_bytes * 1000U) / elapsed;
+    rs485_speed_test_rx_bits_per_second = rs485_speed_test_rx_bytes_per_second * 10U;
+    rs485_speed_test_payload_bits_per_second =
+        (rs485_speed_test_rx_bytes_per_second * 8U * RS422_PROTOCOL_DATA_LENGTH) /
+        RS422_PROTOCOL_FRAME_LENGTH;
+    rs485_speed_test_last_sample_tick = now;
+    rs485_speed_test_last_sample_bytes = rs485_speed_test_protocol_stats.total_bytes;
 }
 
-static void RS485_SpeedTestHandlePacket(RS485_SpeedTestInstanceId instance,
-                                        const RS422_ProtocolPacket *packet)
+static void RS485_SpeedTestResetCounters(void)
 {
-    RS485_SpeedTestInstance *item;
-    const uint8_t *data;
+    uint8_t index;
+
+    rs485_speed_test_current_slave_id = 1U;
+    rs485_speed_test_current_slave_index = 0U;
+    rs485_speed_test_ignored_node_frames = 0U;
+    rs485_speed_test_current_index = 0U;
+    rs485_speed_test_current_baud = RS485_SPEED_TEST_DEFAULT_BAUDRATE;
+    rs485_speed_test_current_actual_baud = RS422_GetActualBaudRate(RS485_SPEED_TEST_PORT);
+    rs485_speed_test_next_baud = 0U;
+    rs485_speed_test_best_stable_baud = 0U;
+    rs485_speed_test_best_stable_actual_baud = 0U;
+    rs485_speed_test_failed_baud = 0U;
+    rs485_speed_test_window_elapsed_ms = 0U;
+    rs485_speed_test_tx_frames = 0U;
+    rs485_speed_test_rx_frames = 0U;
+    rs485_speed_test_echo_frames = 0U;
+    rs485_speed_test_timeout_count = 0U;
+    rs485_speed_test_protocol_error_count = 0U;
+    rs485_speed_test_app_error_count = 0U;
+    rs485_speed_test_uart_error_count = 0U;
+    rs485_speed_test_rx_overflow_count = 0U;
+    rs485_speed_test_tx_overflow_count = 0U;
+    rs485_speed_test_rx_bytes_per_second = 0U;
+    rs485_speed_test_rx_bits_per_second = 0U;
+    rs485_speed_test_payload_bits_per_second = 0U;
+    rs485_speed_test_protocol_error_rate_ppm = 0U;
+    rs485_speed_test_sequence = 1U;
+    rs485_speed_test_last_rx_sequence = 0U;
+    rs485_speed_test_last_rx_command = 0U;
+    rs485_speed_test_last_status = (uint32_t)RS422_PROTOCOL_STATUS_NO_FRAME;
+    rs485_speed_test_last_hal_status = (uint32_t)HAL_OK;
+    rs485_speed_test_waiting_echo = 0U;
+    rs485_speed_test_stable = 0U;
+    rs485_speed_test_wait_sequence = 0U;
+    rs485_speed_test_wait_deadline_tick = 0U;
+    rs485_speed_test_window_start_tick = HAL_GetTick();
+    rs485_speed_test_last_sample_tick = 0U;
+    rs485_speed_test_last_sample_bytes = 0U;
+    (void)memset(&rs485_speed_test_packet, 0, sizeof(rs485_speed_test_packet));
+    (void)memset(&rs485_speed_test_protocol_stats, 0, sizeof(rs485_speed_test_protocol_stats));
+
+    for (index = 0U; index < RS485_SPEED_TEST_MASTER_SLAVE_COUNT; index++)
+    {
+        rs485_speed_test_slave_stats[index].slave_id =
+            rs485_speed_test_master_slave_table[index];
+        rs485_speed_test_slave_stats[index].tx_frames = 0U;
+        rs485_speed_test_slave_stats[index].rx_frames = 0U;
+        rs485_speed_test_slave_stats[index].echo_frames = 0U;
+        rs485_speed_test_slave_stats[index].timeout_count = 0U;
+        rs485_speed_test_slave_stats[index].protocol_error_count = 0U;
+        rs485_speed_test_slave_stats[index].app_error_count = 0U;
+        rs485_speed_test_slave_stats[index].last_rx_sequence = 0U;
+        rs485_speed_test_slave_stats[index].last_status =
+            (uint32_t)RS422_PROTOCOL_STATUS_NO_FRAME;
+        rs485_speed_test_slave_stats[index].last_hal_status = (uint32_t)HAL_OK;
+    }
+}
+
+static void RS485_SpeedTestHandleDataPacket(const RS422_ProtocolPacket *packet)
+{
     uint8_t command;
     uint8_t index;
+    uint8_t slave_index;
+    uint32_t baud;
     uint32_t sequence;
 
-    if ((RS485_SpeedTestIsValidInstance(instance) == 0U) || (packet == NULL))
+    if ((packet == NULL) || (RS485_SpeedTestPayloadIsValid(packet->data) == 0U))
     {
+        rs485_speed_test_app_error_count++;
         return;
     }
 
-    item = &rs485_speed_test_instance[instance];
-    data = packet->data;
-
-    if ((packet->id != RS485_SPEED_TEST_NODE_ID) ||
-        (packet->data_type != RS485_SPEED_TEST_DATA_TYPE))
+    command = packet->data[RS485_SPEED_PAYLOAD_COMMAND_OFFSET];
+    index = packet->data[RS485_SPEED_PAYLOAD_INDEX_OFFSET];
+    baud = RS485_GetU32(packet->data, RS485_SPEED_PAYLOAD_BAUD_OFFSET);
+    sequence = RS485_GetU32(packet->data, RS485_SPEED_PAYLOAD_SEQUENCE_OFFSET);
+    if (RS485_SpeedTestPatternIsValid(packet->data, sequence) == 0U)
     {
-        item->app_error_count++;
+        rs485_speed_test_app_error_count++;
         return;
     }
 
-    if (RS485_SpeedTestPayloadHeaderIsValid(data) == 0U)
-    {
-        item->app_error_count++;
-        return;
-    }
+    rs485_speed_test_last_rx_command = command;
+    rs485_speed_test_last_rx_sequence = sequence;
+    rs485_speed_test_rx_frames++;
 
-    command = data[RS485_SPEED_PAYLOAD_COMMAND_OFFSET];
-    index = data[RS485_SPEED_PAYLOAD_INDEX_OFFSET];
-    sequence = RS485_GetU32(data, RS485_SPEED_PAYLOAD_SEQUENCE_OFFSET);
-
-    if (RS485_SpeedTestPatternIsValid(data, sequence) == 0U)
+    if (rs485_speed_test_role == (uint32_t)RS485_SPEED_TEST_ROLE_MASTER)
     {
-        item->app_error_count++;
-        return;
-    }
+        if (packet->id != (uint8_t)rs485_speed_test_current_slave_id)
+        {
+            rs485_speed_test_ignored_node_frames++;
+            return;
+        }
 
-    item->rx_frames++;
-    item->last_rx_sequence = sequence;
+        slave_index = RS485_SpeedTestSlaveIndexFromId(packet->id);
+        if (slave_index >= RS485_SPEED_TEST_MASTER_SLAVE_COUNT)
+        {
+            rs485_speed_test_ignored_node_frames++;
+            return;
+        }
 
-    if (command != (uint8_t)RS485_SPEED_COMMAND_ECHO)
-    {
-        item->app_error_count++;
-        return;
-    }
+        rs485_speed_test_slave_stats[slave_index].rx_frames++;
+        rs485_speed_test_slave_stats[slave_index].last_rx_sequence = sequence;
 
-    if ((item->waiting_echo != 0U) &&
-        (sequence == item->wait_sequence) &&
-        (index == rs485_speed_test_config[instance].wire_index))
-    {
-        item->echo_frames++;
-        item->waiting_echo = 0U;
-    }
-    else
-    {
-        item->app_error_count++;
+        if ((command == (uint8_t)RS485_SPEED_COMMAND_ECHO) &&
+            (rs485_speed_test_waiting_echo != 0U) &&
+            (sequence == rs485_speed_test_wait_sequence) &&
+            (index == (uint8_t)rs485_speed_test_current_index) &&
+            (baud == rs485_speed_test_current_baud))
+        {
+            rs485_speed_test_echo_frames++;
+            rs485_speed_test_slave_stats[slave_index].echo_frames++;
+            rs485_speed_test_waiting_echo = 0U;
+            RS485_SpeedTestAdvanceMasterSlave();
+        }
+        else
+        {
+            rs485_speed_test_app_error_count++;
+            rs485_speed_test_slave_stats[slave_index].app_error_count++;
+        }
     }
 }
 
-static void RS485_SpeedTestPollInstance(RS485_SpeedTestInstanceId instance)
+static void RS485_SpeedTestPollProtocol(void)
 {
-    RS485_SpeedTestInstance *item;
-    RS422_PortId port;
     RS422_ProtocolStatus status;
-    uint8_t guard;
-
-    if (RS485_SpeedTestIsValidInstance(instance) == 0U)
-    {
-        return;
-    }
-
-    item = &rs485_speed_test_instance[instance];
-    port = rs485_speed_test_config[instance].port;
-    guard = 0U;
+    uint8_t guard = 0U;
 
     do
     {
-        status = RS422_ProtocolPoll(port, &item->packet);
-        item->last_status = (uint32_t)status;
+        status = RS422_ProtocolPoll(RS485_SPEED_TEST_PORT, &rs485_speed_test_packet);
+        rs485_speed_test_last_status = (uint32_t)status;
         if (status == RS422_PROTOCOL_STATUS_OK)
         {
-            RS485_SpeedTestHandlePacket(instance, &item->packet);
+            RS485_SpeedTestHandleDataPacket(&rs485_speed_test_packet);
         }
         else if (status != RS422_PROTOCOL_STATUS_NO_FRAME)
         {
-            item->protocol_error_count++;
+            rs485_speed_test_protocol_error_count++;
         }
         guard++;
     } while ((status != RS422_PROTOCOL_STATUS_NO_FRAME) && (guard < 8U));
 }
 
-static void RS485_SpeedTestSendDataIfReady(RS485_SpeedTestInstanceId instance)
+static void RS485_SpeedTestMasterSendDataIfReady(void)
 {
-    RS485_SpeedTestInstance *item;
-    RS422_PortId port;
-    uint8_t payload[RS422_PROTOCOL_DATA_LENGTH];
-    uint32_t sequence;
     HAL_StatusTypeDef status;
+    uint32_t sequence;
+    uint8_t slave_index;
 
-    if (RS485_SpeedTestIsValidInstance(instance) == 0U)
+    if ((rs485_speed_test_running == 0U) ||
+        (rs485_speed_test_waiting_echo != 0U) ||
+        (RS422_IsTxBusy(RS485_SPEED_TEST_PORT) != 0U) ||
+        (RS485_SpeedTestAnySlaveEnabled() == 0U))
     {
         return;
     }
 
-    item = &rs485_speed_test_instance[instance];
-    port = rs485_speed_test_config[instance].port;
-
-    if ((item->active == 0U) ||
-        (item->state != RS485_SPEED_TEST_STATE_RUNNING) ||
-        (item->waiting_echo != 0U) ||
-        (RS422_IsTxBusy(port) != 0U))
+    rs485_speed_test_current_slave_id = RS485_SpeedTestCurrentMasterSlaveId();
+    slave_index = RS485_SpeedTestSlaveIndexFromId((uint8_t)rs485_speed_test_current_slave_id);
+    if (slave_index >= RS485_SPEED_TEST_MASTER_SLAVE_COUNT)
     {
+        RS485_SpeedTestAdvanceMasterSlave();
         return;
     }
 
-    sequence = item->sequence++;
-    item->actual_baudrate = RS422_GetActualBaudRate(port);
-    RS485_SpeedTestBuildPayload(instance,
-                                (uint8_t)RS485_SPEED_COMMAND_DATA,
-                                sequence,
-                                payload);
-    status = RS422_ProtocolSend_IT(port,
-                                   RS485_SPEED_TEST_NODE_ID,
-                                   RS485_SPEED_TEST_DATA_TYPE,
-                                   payload);
-    item->last_hal_status = (uint32_t)status;
+    sequence = rs485_speed_test_sequence++;
+    status = RS485_SpeedTestSendCommand((uint8_t)rs485_speed_test_current_slave_id,
+                                        (uint8_t)RS485_SPEED_COMMAND_DATA,
+                                        (uint8_t)rs485_speed_test_current_index,
+                                        rs485_speed_test_current_baud,
+                                        sequence,
+                                        RS422_GetActualBaudRate(RS485_SPEED_TEST_PORT));
+    rs485_speed_test_slave_stats[slave_index].last_hal_status = (uint32_t)status;
+
     if (status == HAL_OK)
     {
-        item->tx_frames++;
-        item->wait_sequence = sequence;
-        item->wait_deadline_tick = HAL_GetTick() + RS485_SPEED_TEST_FRAME_TIMEOUT_MS;
-        item->waiting_echo = 1U;
+        rs485_speed_test_wait_sequence = sequence;
+        rs485_speed_test_wait_deadline_tick =
+            HAL_GetTick() + RS485_SPEED_TEST_FRAME_TIMEOUT_MS;
+        rs485_speed_test_waiting_echo = 1U;
+        rs485_speed_test_tx_frames++;
+        rs485_speed_test_slave_stats[slave_index].tx_frames++;
     }
     else
     {
-        item->app_error_count++;
+        rs485_speed_test_app_error_count++;
+        rs485_speed_test_slave_stats[slave_index].app_error_count++;
+        RS485_SpeedTestAdvanceMasterSlave();
     }
 }
 
-static void RS485_SpeedTestRefreshStats(RS485_SpeedTestInstanceId instance)
+static void RS485_SpeedTestMasterRun(void)
 {
-    RS485_SpeedTestInstance *item;
-    RS422_PortId port;
+    uint32_t now = HAL_GetTick();
+    uint8_t slave_index;
 
-    if (RS485_SpeedTestIsValidInstance(instance) == 0U)
+    if (rs485_speed_test_state == (uint32_t)RS485_SPEED_TEST_STATE_MASTER_START_RATE)
+    {
+        rs485_speed_test_current_index = 0U;
+        rs485_speed_test_current_baud = rs485_speed_test_baud_table[0U];
+        rs485_speed_test_current_actual_baud =
+            RS422_GetActualBaudRate(RS485_SPEED_TEST_PORT);
+        rs485_speed_test_window_start_tick = now;
+        RS485_SpeedTestSetFirstMasterSlave();
+        rs485_speed_test_state = (uint32_t)RS485_SPEED_TEST_STATE_MASTER_RUNNING;
+    }
+
+    if (rs485_speed_test_state != (uint32_t)RS485_SPEED_TEST_STATE_MASTER_RUNNING)
     {
         return;
     }
 
-    item = &rs485_speed_test_instance[instance];
-    port = rs485_speed_test_config[instance].port;
+    rs485_speed_test_window_elapsed_ms = now - rs485_speed_test_window_start_tick;
 
-    item->actual_baudrate = RS422_GetActualBaudRate(port);
-    RS422_ProtocolGetStats(port, &item->protocol_stats);
+    if ((rs485_speed_test_waiting_echo != 0U) &&
+        ((int32_t)(now - rs485_speed_test_wait_deadline_tick) >= 0))
+    {
+        rs485_speed_test_timeout_count++;
+        slave_index = RS485_SpeedTestSlaveIndexFromId((uint8_t)rs485_speed_test_current_slave_id);
+        if (slave_index < RS485_SPEED_TEST_MASTER_SLAVE_COUNT)
+        {
+            rs485_speed_test_slave_stats[slave_index].timeout_count++;
+        }
+        rs485_speed_test_waiting_echo = 0U;
+        RS485_SpeedTestAdvanceMasterSlave();
+    }
+
+    RS485_SpeedTestMasterSendDataIfReady();
+}
+
+void RS485_SpeedTest_SetRole(RS485_SpeedTestRole role)
+{
+    if ((role == RS485_SPEED_TEST_ROLE_MASTER) || (role == RS485_SPEED_TEST_ROLE_SLAVE))
+    {
+        rs485_speed_test_role = (uint32_t)role;
+    }
 }
 
 void RS485_SpeedTest_Init(void)
 {
-    RS485_SpeedTestInstanceId instance;
+    uint8_t index;
+    HAL_StatusTypeDef status;
 
-    for (instance = (RS485_SpeedTestInstanceId)0;
-         instance < RS485_SPEED_TEST_INSTANCE_COUNT;
-         instance++)
+    for (index = 0U; index < RS485_SPEED_TEST_MASTER_SLAVE_COUNT; index++)
     {
-        RS485_SpeedTestClearInstance(instance);
+        rs485_speed_test_slave_stats[index].enabled = 0U;
+        rs485_speed_test_slave_stats[index].slave_id =
+            rs485_speed_test_master_slave_table[index];
     }
+
+    rs485_speed_test_local_node_id = RS485_SPEED_TEST_LOCAL_NODE_ID;
+    RS485_SpeedTestResetCounters();
+    RS485_SpeedTestSetFirstMasterSlave();
+    status = RS422_SetBaudRate(RS485_SPEED_TEST_PORT, RS485_SPEED_TEST_DEFAULT_BAUDRATE);
+    rs485_speed_test_last_hal_status = (uint32_t)status;
+    rs485_speed_test_current_actual_baud = RS422_GetActualBaudRate(RS485_SPEED_TEST_PORT);
+    rs485_speed_test_running = 0U;
+    rs485_speed_test_state = (status == HAL_OK) ?
+        (uint32_t)RS485_SPEED_TEST_STATE_IDLE :
+        (uint32_t)RS485_SPEED_TEST_STATE_ERROR;
 }
 
 void RS485_SpeedTest_Start(RS485_SpeedTestInstanceId instance, uint32_t baudrate)
 {
-    RS485_SpeedTestInstance *item;
-    RS422_PortId port;
+    uint8_t slave_index;
     HAL_StatusTypeDef status;
 
-    if (RS485_SpeedTestIsValidInstance(instance) == 0U)
+    if (RS485_SpeedTestInstanceIsValid(instance) == 0U)
     {
         return;
+    }
+
+    slave_index = RS485_SpeedTestInstanceToSlaveIndex(instance);
+    if (slave_index >= RS485_SPEED_TEST_MASTER_SLAVE_COUNT)
+    {
+        return;
+    }
+
+    if (rs485_speed_test_running == 0U)
+    {
+        RS485_SpeedTestResetCounters();
     }
 
     if (baudrate == 0U)
@@ -344,131 +589,149 @@ void RS485_SpeedTest_Start(RS485_SpeedTestInstanceId instance, uint32_t baudrate
         baudrate = RS485_SPEED_TEST_DEFAULT_BAUDRATE;
     }
 
-    RS485_SpeedTestClearInstance(instance);
-
-    item = &rs485_speed_test_instance[instance];
-    port = rs485_speed_test_config[instance].port;
-    item->baudrate = baudrate;
-    item->actual_baudrate = baudrate;
-
-    status = RS422_SetBaudRate(port, baudrate);
-    item->last_hal_status = (uint32_t)status;
-    item->actual_baudrate = RS422_GetActualBaudRate(port);
+    rs485_speed_test_current_baud = baudrate;
+    status = RS422_SetBaudRate(RS485_SPEED_TEST_PORT, baudrate);
+    rs485_speed_test_last_hal_status = (uint32_t)status;
+    rs485_speed_test_slave_stats[slave_index].last_hal_status = (uint32_t)status;
     if (status != HAL_OK)
     {
-        item->state = RS485_SPEED_TEST_STATE_ERROR;
-        item->app_error_count++;
+        rs485_speed_test_state = (uint32_t)RS485_SPEED_TEST_STATE_ERROR;
+        rs485_speed_test_app_error_count++;
+        rs485_speed_test_slave_stats[slave_index].app_error_count++;
         return;
     }
 
-    item->active = 1U;
-    item->state = RS485_SPEED_TEST_STATE_RUNNING;
-    item->sequence = 1U;
-    item->last_status = (uint32_t)RS422_PROTOCOL_STATUS_NO_FRAME;
+    rs485_speed_test_role = (uint32_t)RS485_SPEED_TEST_ROLE_MASTER;
+    rs485_speed_test_slave_stats[slave_index].enabled = 1U;
+    rs485_speed_test_running = 1U;
+    rs485_speed_test_current_actual_baud = RS422_GetActualBaudRate(RS485_SPEED_TEST_PORT);
+    rs485_speed_test_state = (uint32_t)RS485_SPEED_TEST_STATE_MASTER_START_RATE;
+    RS485_SpeedTestSetFirstMasterSlave();
 }
 
 void RS485_SpeedTest_Stop(RS485_SpeedTestInstanceId instance)
 {
-    if (RS485_SpeedTestIsValidInstance(instance) == 0U)
+    uint8_t slave_index;
+
+    if (RS485_SpeedTestInstanceIsValid(instance) == 0U)
     {
         return;
     }
 
-    rs485_speed_test_instance[instance].active = 0U;
-    rs485_speed_test_instance[instance].waiting_echo = 0U;
-    if (rs485_speed_test_instance[instance].state == RS485_SPEED_TEST_STATE_RUNNING)
+    slave_index = RS485_SpeedTestInstanceToSlaveIndex(instance);
+    if (slave_index < RS485_SPEED_TEST_MASTER_SLAVE_COUNT)
     {
-        rs485_speed_test_instance[instance].state = RS485_SPEED_TEST_STATE_STOPPED;
+        rs485_speed_test_slave_stats[slave_index].enabled = 0U;
+    }
+
+    if (RS485_SpeedTestAnySlaveEnabled() == 0U)
+    {
+        rs485_speed_test_running = 0U;
+        rs485_speed_test_waiting_echo = 0U;
+        rs485_speed_test_state = (uint32_t)RS485_SPEED_TEST_STATE_STOPPED;
     }
 }
 
 void RS485_SpeedTest_StopAll(void)
 {
-    RS485_SpeedTestInstanceId instance;
+    uint8_t index;
 
-    for (instance = (RS485_SpeedTestInstanceId)0;
-         instance < RS485_SPEED_TEST_INSTANCE_COUNT;
-         instance++)
+    for (index = 0U; index < RS485_SPEED_TEST_MASTER_SLAVE_COUNT; index++)
     {
-        RS485_SpeedTest_Stop(instance);
+        rs485_speed_test_slave_stats[index].enabled = 0U;
     }
+
+    rs485_speed_test_running = 0U;
+    rs485_speed_test_waiting_echo = 0U;
+    rs485_speed_test_state = (uint32_t)RS485_SPEED_TEST_STATE_STOPPED;
 }
 
 void RS485_SpeedTest_Run(void)
 {
-    RS485_SpeedTestInstanceId instance;
-    RS485_SpeedTestInstance *item;
-    uint32_t now;
+    RS485_SpeedTestPollProtocol();
+    RS485_SpeedTestRefreshProtocolStats();
+    RS485_SpeedTestUpdateRateMeter();
 
-    now = HAL_GetTick();
-    for (instance = (RS485_SpeedTestInstanceId)0;
-         instance < RS485_SPEED_TEST_INSTANCE_COUNT;
-         instance++)
+    if (rs485_speed_test_role == (uint32_t)RS485_SPEED_TEST_ROLE_MASTER)
     {
-        item = &rs485_speed_test_instance[instance];
-        if (item->active != 0U)
-        {
-            RS485_SpeedTestPollInstance(instance);
-
-            if ((item->waiting_echo != 0U) &&
-                ((int32_t)(now - item->wait_deadline_tick) >= 0))
-            {
-                item->timeout_count++;
-                item->app_error_count++;
-                item->waiting_echo = 0U;
-            }
-
-            RS485_SpeedTestSendDataIfReady(instance);
-        }
-
-        RS485_SpeedTestRefreshStats(instance);
+        RS485_SpeedTestMasterRun();
     }
 }
 
 void RS485_SpeedTest_GetStats(RS485_SpeedTestInstanceId instance,
                               RS485_SpeedTestStats *stats)
 {
-    RS485_SpeedTestInstance *item;
-    RS422_PortId port;
+    uint8_t slave_index;
+    uint32_t error_count;
 
-    if ((RS485_SpeedTestIsValidInstance(instance) == 0U) || (stats == NULL))
+    if ((RS485_SpeedTestInstanceIsValid(instance) == 0U) || (stats == NULL))
     {
         return;
     }
 
-    item = &rs485_speed_test_instance[instance];
-    port = rs485_speed_test_config[instance].port;
-    RS485_SpeedTestRefreshStats(instance);
+    slave_index = RS485_SpeedTestInstanceToSlaveIndex(instance);
+    if (slave_index >= RS485_SPEED_TEST_MASTER_SLAVE_COUNT)
+    {
+        return;
+    }
 
-    stats->active = item->active;
-    stats->state = (uint32_t)item->state;
-    stats->baudrate = item->baudrate;
-    stats->actual_baudrate = item->actual_baudrate;
-    stats->tx_bytes = rs422_diag_tx_total_bytes[port];
-    stats->rx_bytes = item->protocol_stats.total_bytes;
-    stats->error_bytes = item->protocol_stats.error_bytes;
-    stats->error_rate_ppm = item->protocol_stats.error_rate_ppm;
-    stats->tx_frames = item->tx_frames;
-    stats->rx_frames = item->rx_frames;
-    stats->echo_frames = item->echo_frames;
-    stats->timeout_count = item->timeout_count;
-    stats->protocol_error_count = item->protocol_error_count;
-    stats->app_error_count = item->app_error_count;
-    stats->uart_error_count = rs422_diag_error_count[port];
-    stats->rx_overflow_count = rs422_diag_rx_overflow_count[port];
-    stats->tx_overflow_count = rs422_diag_tx_overflow_count[port];
-    stats->last_sequence = item->sequence;
-    stats->last_rx_sequence = item->last_rx_sequence;
-    stats->last_status = item->last_status;
-    stats->last_hal_status = item->last_hal_status;
+    RS485_SpeedTestRefreshProtocolStats();
+    if (rs485_speed_test_slave_stats[slave_index].enabled == 0U)
+    {
+        (void)memset(stats, 0, sizeof(*stats));
+        stats->state = rs485_speed_test_state;
+        stats->baudrate = rs485_speed_test_current_baud;
+        stats->actual_baudrate = rs485_speed_test_current_actual_baud;
+        stats->last_status = rs485_speed_test_last_status;
+        stats->last_hal_status = rs485_speed_test_slave_stats[slave_index].last_hal_status;
+        return;
+    }
+
+    error_count = rs485_speed_test_slave_stats[slave_index].timeout_count +
+                  rs485_speed_test_slave_stats[slave_index].protocol_error_count +
+                  rs485_speed_test_slave_stats[slave_index].app_error_count;
+
+    stats->active = rs485_speed_test_slave_stats[slave_index].enabled;
+    stats->state = rs485_speed_test_state;
+    stats->baudrate = rs485_speed_test_current_baud;
+    stats->actual_baudrate = rs485_speed_test_current_actual_baud;
+    stats->tx_bytes = rs485_speed_test_slave_stats[slave_index].tx_frames *
+                      RS422_PROTOCOL_FRAME_LENGTH;
+    stats->rx_bytes = rs485_speed_test_slave_stats[slave_index].rx_frames *
+                      RS422_PROTOCOL_FRAME_LENGTH;
+    stats->error_bytes = error_count * RS422_PROTOCOL_FRAME_LENGTH;
+    stats->error_rate_ppm = (stats->rx_bytes == 0U) ? 0U :
+        (uint32_t)(((uint64_t)stats->error_bytes * RS422_PROTOCOL_ERROR_RATE_SCALE) /
+                   stats->rx_bytes);
+    stats->tx_frames = rs485_speed_test_slave_stats[slave_index].tx_frames;
+    stats->rx_frames = rs485_speed_test_slave_stats[slave_index].rx_frames;
+    stats->echo_frames = rs485_speed_test_slave_stats[slave_index].echo_frames;
+    stats->timeout_count = rs485_speed_test_slave_stats[slave_index].timeout_count;
+    stats->protocol_error_count = rs485_speed_test_protocol_error_count;
+    stats->app_error_count = rs485_speed_test_slave_stats[slave_index].app_error_count;
+    stats->uart_error_count = rs422_diag_error_count[RS485_SPEED_TEST_PORT];
+    stats->rx_overflow_count = rs422_diag_rx_overflow_count[RS485_SPEED_TEST_PORT];
+    stats->tx_overflow_count = rs422_diag_tx_overflow_count[RS485_SPEED_TEST_PORT];
+    stats->last_sequence = rs485_speed_test_sequence;
+    stats->last_rx_sequence = rs485_speed_test_slave_stats[slave_index].last_rx_sequence;
+    stats->last_status = rs485_speed_test_last_status;
+    stats->last_hal_status = rs485_speed_test_slave_stats[slave_index].last_hal_status;
 }
 
 uint8_t RS485_SpeedTest_IsRunning(RS485_SpeedTestInstanceId instance)
 {
-    if (RS485_SpeedTestIsValidInstance(instance) == 0U)
+    uint8_t slave_index;
+
+    if (RS485_SpeedTestInstanceIsValid(instance) == 0U)
     {
         return 0U;
     }
 
-    return rs485_speed_test_instance[instance].active;
+    slave_index = RS485_SpeedTestInstanceToSlaveIndex(instance);
+    if (slave_index >= RS485_SPEED_TEST_MASTER_SLAVE_COUNT)
+    {
+        return 0U;
+    }
+
+    return rs485_speed_test_slave_stats[slave_index].enabled;
 }

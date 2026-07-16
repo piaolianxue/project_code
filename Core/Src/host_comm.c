@@ -433,6 +433,7 @@ static void HostComm_StartTest(void)
 {
 #if (HOST_COMM_TEST_MODE_DEFAULT == HOST_COMM_TEST_MODE_RS485)
     RS485_SpeedTest_StopAll();
+    RS485_SpeedTest_SetRole(RS485_SPEED_TEST_ROLE_MASTER);
     host_comm_test_running = 1U;
 
     if (host_comm_uart1_enabled != 0U)
