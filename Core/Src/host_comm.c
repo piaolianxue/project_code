@@ -834,6 +834,43 @@ static HAL_StatusTypeDef HostComm_SendPortStats(uint8_t port,
     return HostComm_SendValue(error_control_id, stats.error_rate_ppm);
 }
 
+static uint8_t HostComm_IsPortEnabled(uint8_t port)
+{
+    switch (port)
+    {
+        case 1U:
+            return host_comm_uart1_enabled;
+
+        case 2U:
+            return host_comm_uart2_enabled;
+
+        case 3U:
+            return host_comm_uart3_enabled;
+
+        case 4U:
+            return host_comm_uart4_enabled;
+
+        default:
+            return 0U;
+    }
+}
+
+static HAL_StatusTypeDef HostComm_SendPortStatsIfEnabled(uint8_t port,
+                                                         uint32_t tx_control_id,
+                                                         uint32_t rx_control_id,
+                                                         uint32_t error_control_id)
+{
+    if (HostComm_IsPortEnabled(port) == 0U)
+    {
+        return HAL_OK;
+    }
+
+    return HostComm_SendPortStats(port,
+                                  tx_control_id,
+                                  rx_control_id,
+                                  error_control_id);
+}
+
 void HostComm_Init(void)
 {
     host_comm_rx_total_bytes = 0U;
@@ -925,35 +962,35 @@ HAL_StatusTypeDef HostComm_SendStats(void)
 
     host_comm_send_stats_count++;
 
-    status = HostComm_SendPortStats(1U,
-                                    HOST_COMM_UPLOAD_TX_UART1,
-                                    HOST_COMM_UPLOAD_RX_UART1,
-                                    HOST_COMM_UPLOAD_ERR_UART1);
+    status = HostComm_SendPortStatsIfEnabled(1U,
+                                             HOST_COMM_UPLOAD_TX_UART1,
+                                             HOST_COMM_UPLOAD_RX_UART1,
+                                             HOST_COMM_UPLOAD_ERR_UART1);
     if (status != HAL_OK)
     {
         return status;
     }
-    status = HostComm_SendPortStats(2U,
-                                    HOST_COMM_UPLOAD_TX_UART2,
-                                    HOST_COMM_UPLOAD_RX_UART2,
-                                    HOST_COMM_UPLOAD_ERR_UART2);
+    status = HostComm_SendPortStatsIfEnabled(2U,
+                                             HOST_COMM_UPLOAD_TX_UART2,
+                                             HOST_COMM_UPLOAD_RX_UART2,
+                                             HOST_COMM_UPLOAD_ERR_UART2);
     if (status != HAL_OK)
     {
         return status;
     }
-    status = HostComm_SendPortStats(3U,
-                                    HOST_COMM_UPLOAD_TX_UART3,
-                                    HOST_COMM_UPLOAD_RX_UART3,
-                                    HOST_COMM_UPLOAD_ERR_UART3);
+    status = HostComm_SendPortStatsIfEnabled(3U,
+                                             HOST_COMM_UPLOAD_TX_UART3,
+                                             HOST_COMM_UPLOAD_RX_UART3,
+                                             HOST_COMM_UPLOAD_ERR_UART3);
     if (status != HAL_OK)
     {
         return status;
     }
 
-    return HostComm_SendPortStats(4U,
-                                  HOST_COMM_UPLOAD_TX_UART4,
-                                  HOST_COMM_UPLOAD_RX_UART4,
-                                  HOST_COMM_UPLOAD_ERR_UART4);
+    return HostComm_SendPortStatsIfEnabled(4U,
+                                           HOST_COMM_UPLOAD_TX_UART4,
+                                           HOST_COMM_UPLOAD_RX_UART4,
+                                           HOST_COMM_UPLOAD_ERR_UART4);
 }
 
 void HostComm_GetStats(HostComm_Stats *stats)

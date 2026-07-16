@@ -18,7 +18,7 @@ extern "C" {
 #define HOST_COMM_DEFAULT_BAUDRATE             115200U//默认波特率
 #define HOST_COMM_TEST_MODE_RS422              0U//测试模式 RS422
 #define HOST_COMM_TEST_MODE_RS485              1U//测试模式 RS485
-#define HOST_COMM_TEST_MODE_DEFAULT            HOST_COMM_TEST_MODE_RS485//默认测试模式
+#define HOST_COMM_TEST_MODE_DEFAULT            HOST_COMM_TEST_MODE_RS422//默认测试模式
 #define HOST_COMM_UPLOAD_INTERVAL_MS           1000U//上传间隔时间
 #define HOST_COMM_UPLOAD_VALUE_DISPLAY_LENGTH  6U//上传值显示长度
 #define HOST_COMM_UPLOAD_FRAME_LENGTH          (1U + 2U + 4U + HOST_COMM_UPLOAD_VALUE_DISPLAY_LENGTH + 4U)//上传帧长度
