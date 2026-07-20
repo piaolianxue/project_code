@@ -26,9 +26,12 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ads7951.h"
+#include "fdcan.h"
 #include "host_comm.h"
+#include "i2c.h"
 #include "rs422.h"
 #include "rs422_protocol.h"
+#include "slave_comm.h"
 #include "ssi422.h"
 
 #include <stdarg.h>
@@ -352,10 +355,13 @@ int main(void)
   MX_UART7_Init();
   MX_SPI2_Init();
   MX_SPI4_Init();
+  MX_I2C1_Init();
+  MX_FDCAN1_Init();
   /* USER CODE BEGIN 2 */
   ADS7951_Init();
   RS422_Init();
   HostComm_Init();
+  SlaveComm_Init();
 #if (RS422_UART1_EXAMPLE_ENABLE != 0U)
   /* 示例模式只使用串口1/U9，正常运行时该宏保持 0，不主动发送示例协议帧。 */
   RS422_Uart1ExampleInit();
@@ -394,6 +400,7 @@ int main(void)
     RS422_Uart1ExampleRun();
 #endif
     HostComm_Poll();
+    SlaveComm_Poll();
   }
   /* USER CODE END 3 */
 }

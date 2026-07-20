@@ -430,6 +430,21 @@
               <FilePath>..\Core\Inc\ads7951.h</FilePath>
             </File>
             <File>
+              <FileName>i2c.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Core\Inc\i2c.h</FilePath>
+            </File>
+            <File>
+              <FileName>fdcan.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Core\Inc\fdcan.h</FilePath>
+            </File>
+            <File>
+              <FileName>slave_comm.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Core\Inc\slave_comm.h</FilePath>
+            </File>
+            <File>
               <FileName>ads7951.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Core\Src\ads7951.c</FilePath>
@@ -458,6 +473,21 @@
               <FileName>host_comm.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Core\Src\host_comm.c</FilePath>
+            </File>
+            <File>
+              <FileName>i2c.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\i2c.c</FilePath>
+            </File>
+            <File>
+              <FileName>fdcan.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\fdcan.c</FilePath>
+            </File>
+            <File>
+              <FileName>slave_comm.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\slave_comm.c</FilePath>
             </File>
             <File>
               <FileName>main.c</FileName>
@@ -583,6 +613,11 @@
               <FileName>stm32h7xx_hal_i2c_ex.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_i2c_ex.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32h7xx_hal_fdcan.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_fdcan.c</FilePath>
             </File>
             <File>
               <FileName>stm32h7xx_hal_exti.c</FileName>
