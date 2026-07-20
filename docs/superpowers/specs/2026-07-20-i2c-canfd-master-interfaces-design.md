@@ -1,85 +1,85 @@
-# H743 I2C and CANFD Master Interfaces Design
+# H743 I2C 与 CANFD 主机接口设计
 
-Date: 2026-07-20
+日期：2026-07-20
 
-## Goal
+## 目标
 
-Add master-side communication interfaces for a slave device over I2C and CANFD while keeping the existing host/screen protocol unchanged.
+为主机新增与从机通讯的 I2C 和 CANFD 接口，同时保持现有主机与上位机屏幕的通讯协议不变。
 
-This change only brings up the interfaces and protocol helpers. It does not add automatic periodic PING, register polling, or new screen commands.
+本次只打通接口和协议封装，不增加自动周期 `PING`、寄存器轮询，也不新增屏幕命令。
 
-## Hardware Mapping
+## 硬件映射
 
-- I2C uses PB8/PB9 as the master bus pins. The intended peripheral is I2C1.
-- CANFD uses PD0/PD1 as the CANFD bus pins. The intended peripheral is FDCAN1.
-- Existing RS422/RS485 UART test modes remain independent of these peripherals.
+- I2C 使用 PB8/PB9，主机侧计划使用 I2C1。
+- CANFD 使用 PD0/PD1，主机侧计划使用 FDCAN1。
+- 现有 RS422/RS485 串口测试模式与 I2C/CANFD 外设相互独立。
 
-## Slave Protocol
+## 从机协议
 
-I2C:
+I2C：
 
-- Slave 7-bit address: `0x43`.
-- I2C2 and I2C4 on the slave share one register table.
-- Write format: first byte is register address, following bytes write consecutive registers.
-- Read format: read consecutive bytes starting from the current register address. The master helper will set the start register before reading.
+- 从机 7 位地址：`0x43`。
+- 从机侧 I2C2 和 I2C4 共用同一套寄存器表。
+- I2C 写：第 1 字节是寄存器地址，后续字节写入连续寄存器。
+- I2C 读：从当前寄存器地址开始连续读。主机读接口会先写入起始寄存器地址，再读取指定长度。
 
-CANFD:
+CANFD：
 
-- Command extended ID: `0x18EF4301`.
-- Response extended ID: `0x18EF0143`.
-- Data format: byte 0 is sequence, byte 1 is command, byte 2 and later are command parameters.
-- Supported commands:
+- 命令扩展 ID：`0x18EF4301`。
+- 响应扩展 ID：`0x18EF0143`。
+- 数据格式：Byte0 是 `sequence`，Byte1 是 `command`，Byte2 及后续字节是命令参数。
+- 支持命令：
   - `0x01` PING
   - `0x02` READ_REG
   - `0x03` WRITE_REG
   - `0x04` SET_CAN_MODE
   - `0x05` CLEAR_FLAGS
 
-## Architecture
+## 架构
 
-Add CubeMX-style peripheral files:
+新增 CubeMX 风格外设文件：
 
 - `Core/Inc/i2c.h`
 - `Core/Src/i2c.c`
 - `Core/Inc/fdcan.h`
 - `Core/Src/fdcan.c`
 
-Add one application module:
+新增一个应用层模块：
 
 - `Core/Inc/slave_comm.h`
 - `Core/Src/slave_comm.c`
 
-`slave_comm` exposes small master APIs for I2C register access and CANFD command exchange. It owns protocol constants, sequence handling, response capture, counters, and last-status variables for Keil Watch.
+`slave_comm` 提供小而明确的主机接口，用于 I2C 寄存器读写和 CANFD 命令交互。它负责协议常量、CANFD sequence 递增、响应缓存、计数器和最后状态变量，方便 Keil Watch 观察。
 
-`main.c` initializes I2C, FDCAN, and `SlaveComm`, then calls `SlaveComm_Poll()` in the main loop. `SlaveComm_Poll()` only drains CANFD responses and updates status. It does not generate traffic on its own.
+`main.c` 初始化 I2C、FDCAN 和 `SlaveComm`，并在主循环调用 `SlaveComm_Poll()`。`SlaveComm_Poll()` 只接收和记录 CANFD 响应，不主动产生通讯流量。
 
-`host_comm` remains unchanged for the screen protocol. Future work can call `slave_comm` from `host_comm` without changing this interface bring-up.
+`host_comm` 保持上位机屏幕协议不变。后续如果需要，可以在不改变本次接口层的前提下，从 `host_comm` 调用 `slave_comm`。
 
-## Error Handling
+## 错误处理
 
-The APIs return `HAL_StatusTypeDef`.
+接口返回 `HAL_StatusTypeDef`。
 
-- I2C rejects null buffers with non-zero lengths.
-- I2C read helpers first transmit the register address, then receive the requested bytes.
-- CANFD validates payload length before send.
-- CANFD stores the last received response ID, sequence, command, and payload length.
-- Counters track I2C TX/RX/error, CAN TX/RX/error, and ignored CAN frames.
+- I2C 对“长度非 0 但缓冲区为空”的调用返回错误。
+- I2C 读接口先发送寄存器地址，再读取指定长度。
+- CANFD 发送前检查载荷长度。
+- CANFD 保存最后一次收到的响应 ID、sequence、command 和载荷长度。
+- 计数器记录 I2C 发送、接收、错误，CANFD 发送、接收、错误，以及被忽略的 CANFD 帧。
 
-## Tests and Verification
+## 测试与验证
 
-Add a static check script that verifies:
+新增静态检查脚本，验证：
 
-- I2C and FDCAN module files exist.
-- PB8/PB9 and PD0/PD1 are configured in MSP/peripheral code.
-- FDCAN HAL is enabled and included in the Keil project.
-- `slave_comm` defines the required I2C address, CAN IDs, command values, and public APIs.
-- `main.c` initializes and polls the new module.
+- I2C 和 FDCAN 模块文件存在。
+- PB8/PB9 和 PD0/PD1 已在 MSP/外设代码中配置。
+- FDCAN HAL 已启用，Keil 工程已加入 FDCAN 驱动源。
+- `slave_comm` 定义了要求的 I2C 地址、CANFD ID、命令值和公开 API。
+- `main.c` 初始化并轮询新模块。
 
-After implementation, run the new static check, existing relevant checks, and Keil build.
+实现完成后，运行新增静态检查、现有相关检查和 Keil 构建。
 
-## Non-Goals
+## 非目标
 
-- No screen protocol changes.
-- No automatic periodic PING or register polling.
-- No register table interpretation on the master side beyond byte read/write helpers.
-- No changes to RS422 or RS485 mode selection.
+- 不修改屏幕协议。
+- 不增加自动周期 `PING` 或寄存器轮询。
+- 不在主机侧解释寄存器表含义，只提供按字节读写接口。
+- 不修改 RS422/RS485 模式选择。
